@@ -1,32 +1,55 @@
+"""
+Analyse spatiale automatisée des répondants à un questionnaire patrimonial.
+Ce script utilise un clustering hiérarchique agglomératif et visualise les groupes sur une carte Folium.
+"""
+
+import requests
 import pandas as pd
-from sklearn.cluster import DBSCAN
+from sklearn.cluster import AgglomerativeClustering
 import folium
 
-# === Étape 1 : Charger les données
-df = pd.read_csv("donnees_lavaux_auto.csv") 
+# === 1. RÉCUPÉRATION DES DONNÉES DEPUIS BASEROW
+TOKEN = "oF4ZhbO62oPoeUpVVrbjCuf8s3Jaxe3v"  
+TABLE_ID = "510775"
+API_URL = f"https://api.baserow.io/api/database/rows/table/{TABLE_ID}/?user_field_names=true"
 
-# === Étape 2 : Filtrer ceux qui pratiquent ou étudient et pratiquent
+headers = {
+    "Authorization": f"Token {TOKEN}"
+}
+
+print("Récupération des données depuis Baserow...")
+response = requests.get(API_URL, headers=headers)
+
+if response.status_code != 200:
+    raise Exception(f"Erreur API : {response.status_code} – {response.text}")
+
+data = response.json()["results"]
+df = pd.DataFrame(data)
+print(f"Données reçues : {len(df)} lignes")
+
+# === 2. FILTRAGE DES RÉPONDANTS PRATIQUANTS
 df = df[df["role"].isin(["pratique", "lesdeux"])]
 
-# === Étape 3 : Nettoyer et convertir les coordonnées
+# === 3. NETTOYAGE DES COORDONNÉES
 df = df.dropna(subset=["user_lieu_lat", "user_lieu_lon"])
 df["lat"] = df["user_lieu_lat"].astype(float)
 df["lon"] = df["user_lieu_lon"].astype(float)
 
-# === Étape 4 : Clustering spatial (DBSCAN)
+if df.empty:
+    raise ValueError("Aucune donnée géographique exploitable après filtrage.")
+
+# === 4. CLUSTERING HIÉRARCHIQUE
 coords = df[["lat", "lon"]].values
-clustering = DBSCAN(eps=0.05, min_samples=1).fit(coords)
+clustering = AgglomerativeClustering(n_clusters=3).fit(coords)  # Ajuster n_clusters selon les cas des données du PCI
 df["cluster"] = clustering.labels_
 
-# === Étape 5 : Carte
+# === 5. VISUALISATION SUR CARTE INTERACTIVE
 m = folium.Map(location=[46.5, 6.7], zoom_start=12)
-
-# Couleurs aléatoires pour clusters
 colors = ["red", "blue", "green", "purple", "orange", "pink", "darkred", "lightblue"]
 
 for _, row in df.iterrows():
-    label = f"{row['nom']} – Cluster {row['cluster']}"
-    color = "gray" if row["cluster"] == -1 else colors[row["cluster"] % len(colors)]
+    label = f"{row.get('nom', 'Inconnu')} – Cluster {row['cluster']}"
+    color = colors[row["cluster"] % len(colors)]
     folium.CircleMarker(
         location=(row["lat"], row["lon"]),
         radius=6,
@@ -36,6 +59,9 @@ for _, row in df.iterrows():
         fill_opacity=0.8
     ).add_to(m)
 
-# === Étape 6 : Sauvegarde
+# === 6. EXPORT FINAL
+df.to_csv("donnees_lavaux_auto.csv", index=False)
 m.save("carte_clusters_pratique.html")
-print("✅ Carte créée : carte_clusters_pratique.html")
+
+print("Données sauvegardées : donnees_lavaux_auto.csv")
+print("Carte générée : carte_clusters_pratique.html")
