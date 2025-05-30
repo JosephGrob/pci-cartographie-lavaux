@@ -1,0 +1,1157 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Réseau d'acteurs – Lavaux</title>
+  <script type="text/javascript" src="https://unpkg.com/vis-network@9.1.2/dist/vis-network.min.js"></script>
+  <link href="https://unpkg.com/vis-network@9.1.2/styles/vis-network.min.css" rel="stylesheet" type="text/css" />
+
+  <!-- Leaflet pour les cartes dans les noeuds -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+    }
+    #network {
+      width: 100%;
+      height: 600px;
+      border: 1px solid #ccc;
+      border-radius: 10px;
+    }
+    #main-container {
+      display: flex;
+      align-items: flex-start;
+      gap: 20px;
+    }
+
+    #info-panel {
+      padding: 10px;
+      border: 1px solid #ccc;
+      background-color: #f8f8f8;
+      border-radius: 6px;
+      height: 580px;
+      overflow-y: auto;
+      width: 30%;
+      min-width: 250px;
+      display: none;
+    }
+
+
+
+
+    pre {
+      font-size: 0.85em;
+      background-color: #f0f0f0;
+      padding: 10px;
+      border-radius: 4px;
+    }
+    .faded {
+      opacity: 0.8 !important;
+    }
+
+    #main-container {
+      display: flex;
+      align-items: flex-start;
+      gap: 20px;
+    }
+
+
+    .meta-details {
+      font-size: 0.95em;
+      line-height: 1.5;
+    }
+
+    .meta-field {
+      margin-bottom: 10px;
+    }
+
+    .meta-value {
+      margin-left: 10px;
+      color: #333;
+    }
+
+    .meta-desc {
+      margin-left: 10px;
+      color: #777;
+      font-size: 0.85em;
+    }
+
+
+    #toggle-actor-list {
+      background-color: #3498db;
+      color: white;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 6px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+    #toggle-actor-list:hover {
+      background-color: #2980b9;
+    }
+
+
+    #actor-list {
+      list-style: none;
+      padding-left: 0;
+      margin-top: 10px;
+    }
+
+    .actor-entry {
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px;
+      gap: 10px;
+    }
+
+    .actor-entry button {
+      background-color: #ecf0f1;
+      border: 1px solid #bdc3c7;
+      padding: 4px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background-color 0.2s ease;
+    }
+
+    .actor-entry button:hover {
+      background-color: #d6eaf8;
+    }
+
+
+    h1 {
+      text-align: center;
+      font-size: 2em;
+      color: #2c3e50;
+      margin-bottom: 20px;
+    }
+    
+
+
+
+  </style>
+</head>
+<body>
+
+  
+<header style="text-align: center; margin-bottom: 20px;">
+  <h1 style="font-size: 2.4em; color: #2c3e50; margin-bottom: 10px;">
+    Réseau d'acteurs lié au savoir-faire traditionnel (entretien et construction) des murs de vigne à Lavaux
+  </h1>
+
+  <div style="margin-bottom: 15px;">
+    <button id="toggle-actor-list" style="background-color: #3498db; color: white; border: none; padding: 10px 16px; border-radius: 6px; font-size: 15px; cursor: pointer; margin: 4px;">
+      📂 Répertoire des acteurs
+    </button>
+
+    <button id="reset-view" style="background-color: #5d6d7e; color: white; border: none; padding: 10px 16px; border-radius: 6px; font-size: 15px; cursor: pointer; margin: 4px;">
+      🔄 Réinitialiser la vue
+    </button>
+
+    <button id="toggle-map" style="background-color: #27ae60; color: white; border: none; padding: 10px 16px; border-radius: 6px; font-size: 15px; cursor: pointer; margin: 4px;">
+      🗺️ Afficher la carte
+    </button>
+  </div>
+
+  <p style="font-style: italic; color: #555;">
+    Ce graphe est généré automatiquement à partir des réponses enregistrées dans Baserow.
+  </p>
+  </header>
+
+  <!-- Répertoire des acteurs (dépliable) -->
+  <div id="actor-list-container" style="max-height: 0; overflow: hidden; transition: max-height 0.4s ease;">
+    <ul id="actor-list" style="padding-left: 20px; list-style: none; margin-top: 10px;"></ul>
+  </div>
+
+  <!-- Bloc commun pour carte OU réseau -->
+  <div id="main-container" style="display: flex; gap: 20px; margin-top: 10px;">
+    <div id="leaflet-map" style="flex: 2; height: 600px; display: none; border: 1px solid #ccc; border-radius: 10px;"></div>
+    <div id="network" style="flex: 2;"></div>
+    <div id="info-panel" style="display: none; position: relative;">
+      <button id="close-info-panel" style="
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        background: none;
+        border: none;
+        font-size: 18px;
+        cursor: pointer;
+        color: #999;
+      " title="Fermer">✖</button>
+      <div id="info-content">Cliquez sur un nœud pour voir les détails</div>
+    </div>
+
+
+  </div>
+
+
+
+
+
+
+  
+
+  <script>
+
+    let nodesMap = new Map(); 
+
+    function findSimilarNode(nom, age, nodesMap) {
+      for (const [id, node] of nodesMap.entries()) {
+        if (node.label !== nom) continue;
+
+        const nodeAge = node.meta?.age?.[0]?.value;
+        if (!nodeAge || isNaN(nodeAge)) continue;
+
+        const nodeAgeInt = parseInt(nodeAge, 10);
+        const inputAgeInt = parseInt(age, 10);
+
+        if (!isNaN(inputAgeInt) && Math.abs(nodeAgeInt - inputAgeInt) <= 1) {
+          return id; 
+        }
+      }
+
+      return null; 
+    }
+
+    let edges = []; 
+    let options; 
+    let leafletZones = new Map();
+
+
+
+    async function buildNetwork() {
+      const TOKEN = "oF4ZhbO62oPoeUpVVrbjCuf8s3Jaxe3v";
+      const TABLE_ID = "510775";
+      const API_URL = `https://api.baserow.io/api/database/rows/table/${TABLE_ID}/?user_field_names=true`;
+
+      const response = await fetch(API_URL, {
+        headers: { Authorization: `Token ${TOKEN}` }
+      });
+      const result = await response.json();
+      const rows = result.results;
+
+
+      
+      const roleLabels = {
+        pratique: "pratique",
+        etudie: "étudie",
+        lesdeux: "étudie et pratique",
+        temoin: "témoigne"
+      };
+
+      function updateNodeData(node, updates, isAuthor = false) {
+        for (const key in updates) {
+          const value = updates[key];
+          if (!value || typeof value !== "string" || value.trim() === "") continue;
+
+          if (!node.meta[key]) node.meta[key] = [];
+
+          if (isAuthor) {
+            // Supprimer les valeurs "collab" uniquement si on ajoute une valeur "author" pour ce champ
+            node.meta[key] = node.meta[key].filter(item => {
+              return item.source !== "collab" || item.value !== value;
+            });
+          }
+
+
+          // N'ajouter que si la valeur n'existe pas déjà
+          const alreadyExists = node.meta[key].some(item => item.value === value);
+          if (!alreadyExists) {
+            node.meta[key].push({
+              value: value,
+              source: isAuthor ? "author" : "collab"
+            });
+          }
+        }
+      }
+
+      rows.forEach(row => {
+        const author = row.nom?.trim();
+        const authorType = row.type;
+        const role = row.role;
+        let resolvedAuthorId; 
+
+
+        // ---- Auteur principal
+        if (author) {
+          resolvedAuthorId = findSimilarNode(author, row.age, nodesMap) || author;
+
+          if (!nodesMap.has(resolvedAuthorId)) {
+            nodesMap.set(resolvedAuthorId, {
+              id: resolvedAuthorId,
+              label: author,
+              group: authorType,
+              meta: {}
+            });
+          }
+
+          updateNodeData(nodesMap.get(resolvedAuthorId), {
+            type: row.type,
+            age: row.age,
+            metier: row.metier,
+            user_lieu_lat: row.user_lieu_lat,
+            user_lieu_lon: row.user_lieu_lon,
+
+            user_lieu: row.user_lieu,
+            memoire: row.memoire,
+            evenement: row.evenement
+          }, true); 
+
+        }
+
+        // ---- Collaborateur
+        const collab = row.collab_nom?.trim();
+        const collabType = row.collab_type;
+
+
+        let dynCollabs = [];
+
+        try {
+          if (typeof row.collaborations_dynamiques === "string") {
+            dynCollabs = JSON.parse(row.collaborations_dynamiques);
+          } else if (Array.isArray(row.collaborations_dynamiques)) {
+            dynCollabs = row.collaborations_dynamiques;
+          }
+        } catch (e) {
+          console.warn("❌ Impossible de parser collaborations_dynamiques :", e);
+        }
+
+        if (Array.isArray(dynCollabs)) {
+          dynCollabs.forEach(c => {
+            const cName = c.nom?.trim();
+            if (!cName) return;
+
+            const resolvedDynCollabId = findSimilarNode(cName, c.age, nodesMap) || cName;
+
+            if (!nodesMap.has(resolvedDynCollabId)) {
+              nodesMap.set(resolvedDynCollabId, {
+                id: resolvedDynCollabId,
+                label: cName,
+                group: c.type,
+                meta: {}
+              });
+            }
+
+            updateNodeData(nodesMap.get(resolvedDynCollabId), {
+              type: c.type,
+              age: c.age,
+              metier: c.metier,
+              collab_lieu: c.lieu,
+              collab_implication: c.implication,
+              collab_lieu_lat: c.lat,
+              collab_lieu_lon: c.lon,
+              annee: c.annee,
+              membres: c.membres,
+              activites: c.activites,
+              nb_personnes: c.nb_personnes,
+              liens: c.liens,
+              ages_famille: c.ages_famille,
+              collab_autre: c.autre
+            }, false);
+
+
+            edges.push({
+              from: resolvedAuthorId,
+              to: resolvedDynCollabId,
+              label: "collabore avec",
+              title: c.description || "",
+              color: { color: "#2c3e50" }
+            });
+          });
+        }
+
+
+
+
+        if (collab) {
+          let resolvedCollabId = findSimilarNode(collab, row.collab_age, nodesMap) || collab;
+
+          if (!nodesMap.has(resolvedCollabId)) {
+            nodesMap.set(resolvedCollabId, {
+              id: resolvedCollabId,
+              label: collab,
+              group: collabType,
+              meta: {}
+            });
+          }
+
+          const extraCollabData = {
+            type: collabType,
+            age: row.collab_age,
+            metier: row.collab_metier,
+            collab_lieu: row.collab_lieu,
+            collab_implication: row.collab_implication,
+            label: collab,
+            annee: row.collab_annee,
+            membres: row.collab_membres,
+            activites: row.collab_activites,
+            nb_personnes: row.collab_nb_personnes,
+            liens: row.collab_liens,
+            ages_famille: row.collab_ages_famille,
+            collab_autre: row.collab_autre,
+            collab_lieu_lat: row.collab_lieu_lat,
+            collab_lieu_lon: row.collab_lieu_lon
+          };
+
+          updateNodeData(nodesMap.get(resolvedCollabId), extraCollabData, false);
+
+          edges.push({
+            from: resolvedAuthorId,
+            to: resolvedCollabId,
+            label: "collabore avec",
+            title: row.collab_description || "",
+            color: { color: "#2c3e50" }
+          });
+        }
+
+
+        // ---- Zone(s)
+        const zones = row.zones_geojson;
+        const labelTexte = roleLabels[role] || "a renseigné";
+
+        if (zones && zones.length > 0 && author) {
+          try {
+            const geojson = JSON.parse(zones);
+            const zoneLabelsByIndex = [
+              "a appris (apprend)",        // index 0 = apprentissage
+              "a transmis (transmets)",      // index 1 = transmission
+              "a pratiqué (pratique)",      // index 2 = pratique
+              "a étudié (étudie)",        // index 3 = étude
+              "a des informations"        // index 4 = information (si présent)
+            ];
+
+            geojson.forEach((feature, index) => {
+              const zoneId = `${author}-zone-${index}`;
+
+              // On récupère le type réel de la zone (ajouté précédemment dans le formulaire)
+              const zoneType = feature.properties?.zoneType;
+
+              const zoneLabelsByType = {
+                apprentissage: "a appris (apprend)",
+                transmission: "a transmis (transmet)",
+                pratique: "a pratiqué (pratique)",
+                etudie: "a étudié (étudie)",
+                information: "a des informations"
+              };
+
+              const edgeLabel = zoneLabelsByType[zoneType] || "lié à cette zone";
+
+              nodesMap.set(zoneId, {
+                id: zoneId,
+                label: "Lieu",
+                group: "zone",
+                title: "Cliquez pour voir la carte",
+                geojson: feature
+              });
+
+              edges.push({
+                from: resolvedAuthorId,
+                to: zoneId,
+                label: edgeLabel,
+                dashes: true,
+                color: { color: "#e67e22" }
+              });
+
+            });
+
+          } catch (e) {
+            console.error("⛔ Erreur de parsing GeoJSON :", e);
+          }
+        }
+      });
+
+
+      const keyLabels = {
+        // Répondants
+        type: ["Type d’acteur", ""],
+        nom: ["Nom", ""],
+        age: ["Âge", ""],
+        metier: ["Métier", "Profession ou activité principale"],
+        user_lieu: ["Lieu", "Lieu de résidence ou d'activité"],
+        user_lieu_lat: ["Latitude", "Latitude du lieu"],
+        user_lieu_lon: ["Longitude", "Longitude du lieu"],
+        nb_personnes: ["Nombre de personnes", "Taille du groupe ou de la famille"],
+        liens: ["Liens", "Relations entre membres"],
+        ages_famille: ["Âges détaillés", "Âges des membres"],
+        annee: ["Année de création", "Date de début d'activité"],
+        membres: ["Nombre de membres", "Combien de membres contient l'entité"],
+        activites: ["Activités", "Activités exercées"],
+        role: ["Rôle dans le PCI", "Relation à ce savoir-faire"],
+        memoire: ["Souvenirs, récits, anecdotes ou perceptions liés à ce savoir-faire", "Texte libre"],
+        evenement: ["Transformation(s) du savoir-faire observée(s) au fil du temps", "Texte libre"],
+        transmission_intention: ["Volonté/souhait de transmettre (ou non) ce savoir-faire", "Oui/non"],
+
+        // Collaborateurs (équivalents)
+        collab_type: ["Type", ""],
+        collab_nom: ["Nom", ""],
+        collab_description: ["Souvenir partagé", "Anecdote ou souvenir en lien avec la collaboration"],
+        collab_lieu: ["Lieu", "Lieu de résidence ou d'activité"],
+        collab_lieu_lat: ["Latitude", "Latitude du lieu"],
+        collab_lieu_lon: ["Longitude", "Longitude du lieu"],
+        collab_age: ["Âge", ""],
+        collab_metier: ["Métier", "Profession ou activité principale"],
+        collab_implication: ["Implication PCI", "Quelle implication dans le savoir-faire"],
+        collab_nb_personnes: ["Nombre de personnes", "Taille du groupe ou famille"],
+        collab_liens: ["Liens entre personnes", "Relations entre membres"],
+        collab_ages_famille: ["Âges des membres", "Âges détaillés"],
+        collab_annee: ["Année de création", "Début d'activité"],
+        collab_membres: ["Nombre de membres", "Combien de membres impliqués"],
+        collab_activites: ["Activités", "Activités exercées"],
+        collab_autre: ["Autres précisions", "Spécificités si type = autre"],
+
+        // Zones mémoire
+        memoire_zones: ["Souvenir lié à une zone", ""],
+        memoire_points: ["Souvenir lié à un point", ""]
+      };
+
+
+      function generateCustomDetails(meta, type) {
+        if (!meta) return "<em>Aucune information disponible</em>";
+
+        const get = key => {
+          const list = meta[key];
+          if (!list || list.length === 0) return null;
+          return list.map(entry => entry.value).join("<br>");
+        };
+
+        const allKeys = Object.keys(meta).sort();
+        let output = `<div class="meta-details">`;
+
+        for (const key of allKeys) {
+          if (key === "type") continue; 
+
+          const value = get(key);
+          if (!value) continue;
+
+          const [label, description] = keyLabels[key] || [key, ""];
+          output += `
+            <div class="meta-field">
+              <strong>${label}:</strong><br>
+              <div class="meta-value">${value}</div>
+              ${description ? `<div class="meta-desc"><em>${description}</em></div>` : ""}
+            </div><hr>
+          `;
+        }
+
+
+        output += `</div>`;
+        return output;
+      }
+
+
+
+
+
+
+
+
+
+      // Créer les noeuds avec les infos combinées
+      const nodes = Array.from(nodesMap.values()).map(node => {
+        const meta = node.meta || {};
+        const formatField = key => {
+          const list = meta[key];
+          if (!list || list.length === 0) return "Non renseigné";
+          return list.map(entry => `${entry.value}`).join("<br>");
+        };
+
+
+
+        // on stocke les métadonnées complètes ici
+        node.details = generateCustomDetails(meta, node.group);
+
+
+
+        return node;
+      });
+
+
+      
+      const list = document.getElementById("actor-list");
+      list.innerHTML = "";
+
+      Array.from(nodesMap.values())
+        .filter(n => n.group !== "zone")
+        .sort((a, b) => a.label.localeCompare(b.label))
+        .forEach(n => {
+          const li = document.createElement("li");
+          li.className = "actor-entry";
+          li.innerHTML = `
+            <span><strong>${n.label}</strong> <span style="color: #777;">(${n.group})</span></span>
+            <button class="actor-btn" data-id="${n.id}">📍 Voir dans le réseau</button>
+          `;
+          const button = li.querySelector(".actor-btn");
+          button.addEventListener("click", () => {
+            const selectedId = button.dataset.id;
+            console.log("🔍 Bouton cliqué :", selectedId);
+
+            const allNodeIds = data.nodes.getIds();
+            const allEdgeIds = data.edges.getIds();
+
+            const connectedEdges = data.edges.get({
+              filter: edge => edge.from === selectedId || edge.to === selectedId
+            });
+
+            const connectedNodeIds = new Set();
+            connectedEdges.forEach(edge => {
+              connectedNodeIds.add(edge.from);
+              connectedNodeIds.add(edge.to);
+            });
+
+            allNodeIds.forEach(id => {
+              const isConnected = connectedNodeIds.has(id);
+              data.nodes.update({
+                id: id,
+                color: {
+                  ...data.nodes.get(id).color,
+                  opacity: isConnected ? 1 : 0.15
+                }
+              });
+            });
+
+            allEdgeIds.forEach(id => {
+              const edge = data.edges.get(id);
+              const isConnected = edge.from === selectedId || edge.to === selectedId;
+              data.edges.update({
+                id: id,
+                color: {
+                  ...edge.color,
+                  opacity: isConnected ? 1 : 0.1
+                }
+              });
+            });
+
+          });
+
+          list.appendChild(li);
+        });
+
+
+      const container = document.getElementById("network");
+      const data = { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) };
+
+      options = {
+        nodes: {
+          shape: "dot",
+          size: 15,
+          font: {
+            size: 14,
+            color: "#000000",
+            face: "Arial"
+          },
+          borderWidth: 1
+        },
+        groups: {
+          personne: { color: "#3498db" },
+          famille: { color: "#3498db" },
+          association: { color: "#3498db" },
+          entreprise: { color: "#3498db" },
+          collectif: { color: "#3498db" },
+          commune: { color: "#3498db" },
+          autre: { color: "#3498db" },
+          zone: { color: "#f39c12" }
+        },
+        edges: {
+          arrows: "to",
+          font: { align: "middle" }
+        },
+        physics: {
+        solver: "forceAtlas2Based",
+        forceAtlas2Based: {
+          gravitationalConstant: -50,
+          centralGravity: 0.01,
+          springLength: 180, 
+          springConstant: 0.04
+        },
+        stabilization: {
+          iterations: 150
+        }
+      }
+            };
+
+      network = new vis.Network(container, data, options);
+
+
+
+
+      network.on("click", function (params) {
+        const panel = document.getElementById("info-panel");
+
+        panel.style.display = "block";
+
+
+        document.getElementById("info-panel").style.display = "block";
+
+
+        if (params.nodes.length > 0) {
+          const nodeId = params.nodes[0];
+          const nodeData = nodesMap.get(nodeId);
+
+          if (nodeData.group === "zone" && nodeData.geojson) {
+            const geojson = nodeData.geojson;
+            document.getElementById("info-content").innerHTML = `
+              <h3>Zone d’étude</h3>
+              <div id="mini-map" style="height: 250px; border-radius: 6px; margin-top: 10px;"></div>
+            `;
+            setTimeout(() => {
+              const map = L.map("mini-map").setView([46.5, 6.7], 13);
+              L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                attribution: "&copy; OpenStreetMap contributors"
+              }).addTo(map);
+              L.geoJSON(geojson, {
+                style: { color: "#e67e22", weight: 2 }
+              }).addTo(map);
+              map.fitBounds(L.geoJSON(geojson).getBounds());
+            }, 50);
+          } else {
+            document.getElementById("info-content").innerHTML = `
+              <h3>${nodeData.label}</h3>
+              <p><strong>Type</strong>: ${nodeData.group}</p>
+              <p><strong>Détails</strong>:<br>${nodeData.details}</p>
+            `;
+          }
+
+          } else if (params.edges.length > 0) {
+            const edgeId = params.edges[0];
+            const edgeData = data.edges.get(edgeId);
+
+            const fromLabel = nodesMap.get(edgeData.from)?.label || edgeData.from;
+            const toLabel = nodesMap.get(edgeData.to)?.label || edgeData.to;
+
+            const isZoneLink = (fromLabel === "Lieu" || toLabel === "Lieu") || toLabel.includes("zone");
+
+            if (isZoneLink) {
+              const relation = edgeData.label || "lien au territoire";
+
+              // Déterminer un texte adapté selon le type de relation
+              let contextSentence = "Souvenir ou perception liée à ce lieu :";
+
+              if (relation.includes("appris")) {
+                contextSentence = "Souvenir(s), perception(s), anecdote(s), information(s) lié(s) à ce lieu en lien avec l’apprentissage ou la transmission du savoir-faire:";
+              } else if (relation.includes("transmis")) {
+                contextSentence = "Souvenir(s), perception(s), anecdote(s), information(s) lié(s) à ce lieu en lien avec la transmission ou l’enseignement du savoir-faire :";
+              } else if (relation.includes("pratiqué")) {
+                contextSentence = "Souvenir(s), perception(s), anecdote(s), information(s) lié(s) à ce lieu dans le cadre de la pratique du savoir-faire :";
+              } else if (relation.includes("étudié")) {
+                contextSentence = "Souvenir(s), perception(s), anecdote(s), information(s) lié(s) à ce lieu dans le cadre de l’étude ou de la recherche :";
+              } else if (relation.includes("informations")) {
+                contextSentence = "Information(s) que l’acteur souhaite partager à propos de ce lieu en lien avec le savoir-faire :";
+              }
+
+              document.getElementById("info-content").innerHTML = `
+                <h3>Lien au territoire ou à l’espace</h3>
+                <p><strong>Acteur :</strong> ${fromLabel}</p>
+                <p><strong>Type de relation au lieu :</strong> ${relation.charAt(0).toUpperCase() + relation.slice(1)} le savoir-faire</p>
+                <p><strong>${contextSentence}</strong></p>
+                <p>${edgeData.title?.trim() || "<em>Aucun élément n’a été renseigné pour ce lieu.</em>"}</p>
+              `;
+            }
+          }
+
+
+
+
+        if (params.nodes.length === 0 && params.edges.length === 0) {
+          data.nodes.getIds().forEach(id => {
+            network.body.nodes[id].setOptions({ opacity: 1 });
+          });
+          data.edges.getIds().forEach(id => {
+            network.body.edges[id].setOptions({ opacity: 1 });
+          });
+          leafletMarkers.forEach(marker => {
+            marker.setStyle({ fillOpacity: 0.8, opacity: 1 });
+          });
+          leafletLines.forEach(line => {
+            line.setStyle({ opacity: 0.7 });
+          });
+          document.getElementById("info-panel").style.display = "none";
+        }
+
+
+      });
+
+      console.log("✅ Boutons acteurs ajoutés, mise en place des événements...");
+
+      document.addEventListener("click", function (e) {
+        const btn = e.target.closest(".actor-btn");
+        if (!btn) return;
+
+        const selectedId = btn.dataset.id;
+
+        // Récupère les arêtes directement reliées AU SEUL nœud cliqué
+        const directlyConnectedEdges = data.edges.get({
+          filter: edge => edge.from === selectedId || edge.to === selectedId
+        });
+
+        // On récupère les ID des nœuds connectés (y compris le nœud cliqué lui-même)
+        const directlyConnectedNodeIds = new Set([selectedId]);
+        directlyConnectedEdges.forEach(edge => {
+          directlyConnectedNodeIds.add(edge.from);
+          directlyConnectedNodeIds.add(edge.to);
+        });
+
+        // Met à jour l'opacité des nœuds
+        data.nodes.getIds().forEach(id => {
+          const node = network.body.nodes[id];
+          if (node) {
+            node.setOptions({ opacity: directlyConnectedNodeIds.has(id) ? 1 : 0.05 });
+          }
+        });
+
+        // Met à jour l'opacité des arêtes
+        data.edges.getIds().forEach(id => {
+          const edge = data.edges.get(id);
+          const isDirect = edge.from === selectedId || edge.to === selectedId;
+          const edgeInVis = network.body.edges[id];
+          if (edgeInVis) {
+            edgeInVis.setOptions({
+              color: {
+                color: edge.color?.color || "#999",
+                opacity: isDirect ? 1 : 0.05
+              },
+              font: {
+                color: isDirect ? "#000" : "rgba(0,0,0,0)"
+              }
+            });
+          }
+        });
+
+        // Carte : met à jour les marqueurs
+        leafletMarkers.forEach((marker, id) => {
+          const isDirect = directlyConnectedNodeIds.has(id);
+          marker.setStyle({
+            fillOpacity: isDirect ? 0.8 : 0.05,
+            opacity: isDirect ? 1 : 0.05
+          });
+        });
+
+        // Carte : met à jour les zones
+        leafletZones.forEach((geoLayer, zoneId) => {
+          const isDirect = directlyConnectedNodeIds.has(zoneId);
+          geoLayer.setStyle({
+            fillOpacity: isDirect ? 0.2 : 0.01,
+            opacity: isDirect ? 1 : 0.05
+          });
+        });
+
+        // Carte : met à jour les lignes
+        leafletLines.forEach((line, key) => {
+          const parts = key.split("-");
+          const from = parts[1];
+          const to = parts[2];
+          const isDirect = (from === selectedId || to === selectedId);
+          line.setStyle({
+            opacity: isDirect ? 0.7 : 0.05
+          });
+        });
+      });
+
+
+
+      document.getElementById("reset-view").addEventListener("click", () => {
+        // Réinitialiser la carte Leaflet
+        leafletMarkers.forEach(marker => {
+          marker.setStyle({ fillOpacity: 0.8, opacity: 1 });
+        });
+        leafletZones.forEach(zone => {
+          zone.setStyle({ fillOpacity: 0.2, opacity: 1 });
+        });
+        leafletLines.forEach(line => {
+          line.setStyle({ opacity: 0.7 });
+        });
+
+        // Réinitialiser le réseau (vis.js)
+        Object.values(network.body.nodes).forEach(node => {
+          node.setOptions({ opacity: 1 });
+        });
+        Object.values(network.body.edges).forEach(edge => {
+          edge.setOptions({
+            color: {
+              color: edge.options.color?.color || "#999",
+              opacity: 1
+            },
+            font: {
+              color: "#000"
+            }
+          });
+        });
+
+        // Recentrer automatiquement le graphe si tu veux :
+        network.fit({
+          animation: {
+            duration: 500,
+            easingFunction: "easeInOutQuad"
+          }
+        });
+
+        // Recentrer la carte si elle est active
+        if (leafletMap && markersLayer && leafletMap._container.style.display !== "none") {
+          const bounds = markersLayer.getBounds();
+          if (bounds.isValid()) {
+            leafletMap.fitBounds(bounds, { padding: [20, 20] });
+          }
+        }
+
+        // Nettoyer le panneau d’info
+        const panel = document.getElementById("info-panel");
+        document.getElementById("info-content").innerHTML = "Cliquez sur un nœud pour voir les détails";
+        document.getElementById("info-panel").style.display = "none";
+
+      });
+
+
+
+
+      document.getElementById("close-info-panel").addEventListener("click", () => {
+        document.getElementById("info-panel").style.display = "none";
+      });
+
+      document.getElementById("close-info-panel").addEventListener("click", () => {
+        const panel = document.getElementById("info-panel");
+        panel.style.display = "none";
+
+        const mapDiv = document.getElementById("leaflet-map");
+        const isMapVisible = mapDiv.style.display === "block";
+
+        if (isMapVisible && leafletMap && markersLayer) {
+          // Recentrer la CARTE
+          const bounds = markersLayer.getBounds();
+          if (bounds.isValid()) {
+            leafletMap.fitBounds(bounds, { padding: [20, 20] });
+          }
+        } else {
+          // Recentrer le RÉSEAU
+          if (network && typeof network.fit === "function") {
+            network.fit({
+              animation: {
+                duration: 500,
+                easingFunction: "easeInOutQuad"
+              }
+            });
+          }
+        }
+      });
+
+
+    }
+
+
+    buildNetwork();
+    function getNodeCoords(meta) {
+      const lat = meta.user_lieu_lat?.[0]?.value || meta.collab_lieu_lat?.[0]?.value;
+      const lon = meta.user_lieu_lon?.[0]?.value || meta.collab_lieu_lon?.[0]?.value;
+      if (lat && lon) return [parseFloat(lat), parseFloat(lon)];
+      return null;
+    }
+
+
+
+
+
+    let leafletMap;
+    let markersLayer;
+    let leafletMarkers = new Map();
+    let leafletLines = new Map();
+
+    document.getElementById("toggle-map").addEventListener("click", () => {
+      const mapDiv = document.getElementById("leaflet-map");
+      const netDiv = document.getElementById("network");
+      const toggleBtn = document.getElementById("toggle-map");
+
+      const isVisible = mapDiv.style.display === "block";
+      mapDiv.style.display = isVisible ? "none" : "block";
+      netDiv.style.display = isVisible ? "block" : "none";
+
+
+      toggleBtn.textContent = isVisible ? "🗺️ Afficher la carte" : "🔁 Retour au réseau";
+
+      if (isVisible) {
+        setTimeout(() => {
+          if (network && typeof network.redraw === "function") {
+            network.redraw(); // Forcer recalcul taille
+            network.fit({
+              animation: {
+                duration: 500,
+                easingFunction: "easeInOutQuad"
+              }
+            });
+          }
+        }, 100);
+      }
+
+
+
+      if (!isVisible) {
+        if (leafletMap) {
+          leafletMap.remove();
+          document.getElementById("info-panel").style.display = "none";
+          document.getElementById("info-content").innerHTML = "Cliquez sur un nœud pour voir les détails";
+
+
+          document.getElementById("leaflet-map").innerHTML = "";
+        }
+
+        leafletMap = L.map("leaflet-map").setView([46.5, 6.7], 12);
+        L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+          attribution: "&copy; OpenStreetMap contributors"
+        }).addTo(leafletMap);
+
+        markersLayer = L.featureGroup().addTo(leafletMap);
+        leafletMarkers.clear();
+        leafletLines.clear();
+      }
+
+      // 📍 Ajout des marqueurs
+      Array.from(nodesMap.values()).forEach(node => {
+        const coords = getNodeCoords(node.meta || {});
+        if (!coords) return;
+        
+
+        const color = options.groups[node.group]?.color || "#3498db";
+
+        const marker = L.circleMarker(coords, {
+          radius: 8,
+          color: color,
+          fillColor: color,
+          fillOpacity: 0.8,
+          weight: 1
+        })
+          .bindPopup(`<strong>${node.label}</strong><br>Type : ${node.group}`)
+          .addTo(markersLayer);
+
+        marker.on('click', () => {
+          const panel = document.getElementById("info-panel");
+          panel.style.display = "block"; 
+
+          if (node.group === "zone" && node.geojson) {
+            const geojson = node.geojson;
+            document.getElementById("info-content").innerHTML = `
+              <h3>Zone d’étude</h3>
+              <div id="mini-map" style="height: 250px; border-radius: 6px; margin-top: 10px;"></div>
+            `;
+            setTimeout(() => {
+              const map = L.map("mini-map").setView([46.5, 6.7], 13);
+              L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                attribution: "&copy; OpenStreetMap contributors"
+              }).addTo(map);
+              L.geoJSON(geojson, {
+                style: { color: "#e67e22", weight: 2 }
+              }).addTo(map);
+              map.fitBounds(L.geoJSON(geojson).getBounds());
+            }, 50);
+          } else {
+            document.getElementById("info-content").innerHTML = `
+              <h3>${node.label}</h3>
+              <p><strong>Type</strong>: ${node.group}</p>
+              <p><strong>Détails</strong>:<br>${node.details}</p>
+            `;
+          }
+        });
+
+
+
+        leafletMarkers.set(node.id, marker);
+        node._mapCoords = coords;
+      });
+
+      // 🟧 Zones
+      Array.from(nodesMap.values()).forEach(node => {
+        if (node.group === "zone" && node.geojson) {
+          const geoLayer = L.geoJSON(node.geojson, {
+            style: {
+              color: "#e67e22",
+              weight: 2,
+              fillOpacity: 0.2
+            }
+          })
+            .bindPopup(`<strong>${node.label}</strong>`)
+            .addTo(markersLayer);
+
+
+            geoLayer.on('click', () => {
+              const panel = document.getElementById("info-panel");
+              const geojson = node.geojson;
+              document.getElementById("info-panel").style.display = "block";
+
+              document.getElementById("info-content").innerHTML = `
+                <h3>Zone d’étude</h3>
+                <div id="mini-map" style="height: 250px; border-radius: 6px; margin-top: 10px;"></div>
+              `;
+
+              setTimeout(() => {
+                const map = L.map("mini-map").setView([46.5, 6.7], 13);
+                L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                  attribution: "&copy; OpenStreetMap contributors"
+                }).addTo(map);
+                L.geoJSON(geojson, {
+                  style: { color: "#e67e22", weight: 2 }
+                }).addTo(map);
+                map.fitBounds(L.geoJSON(geojson).getBounds());
+              }, 50);
+            });
+
+
+          node._bounds = geoLayer.getBounds();
+          node._center = geoLayer.getBounds().getCenter();
+          leafletZones.set(node.id, geoLayer);
+        }
+      });
+
+      // Lignes entre nœuds (personne ↔ personne ou personne ↔ zone)
+      edges.forEach(edge => {
+        const fromNode = nodesMap.get(edge.from);
+        const toNode = nodesMap.get(edge.to);
+
+        const fromCoords = fromNode?._mapCoords || fromNode?._center;
+        const toCoords = toNode?._mapCoords || toNode?._center;
+
+        if (!fromCoords || !toCoords) {
+          console.warn("⛔ Lien ignoré car coordonnées manquantes :", edge);
+          return;
+        }
+
+        const isZoneLink = fromNode.group === "zone" || toNode.group === "zone";
+        const keyPrefix = isZoneLink ? "zone" : "edge";
+        const key = `${keyPrefix}-${edge.from}-${edge.to}`;
+
+        const line = L.polyline([fromCoords, toCoords], {
+          color: edge.color?.color || "#555",
+          weight: 2,
+          opacity: 0.7,
+          dashArray: edge.dashes ? "4" : null
+        })
+          .bindTooltip(edge.label || "Lien")
+          .addTo(markersLayer);
+
+        leafletLines.set(key, line);
+      });
+
+      // Centrer la carte
+      const bounds = markersLayer.getBounds();
+      if (bounds.isValid()) {
+        leafletMap.fitBounds(bounds, { padding: [20, 20] });
+      }
+    });
+
+
+    document.getElementById("toggle-actor-list").addEventListener("click", () => {
+      const container = document.getElementById("actor-list-container");
+      const isOpen = container.style.maxHeight && container.style.maxHeight !== "0px";
+
+      if (isOpen) {
+        container.style.maxHeight = "0px";
+      } else {
+        // Déplie selon la hauteur réelle
+        container.style.maxHeight = container.scrollHeight + "px";
+      }
+    });
+
+
+
+  </script>
+
+</body>
+</html>
