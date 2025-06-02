@@ -25,7 +25,7 @@ Le dispositif est structuré autour de trois étapes principales :
    Des scripts Python permettent d’analyser les données collectées :
    - Extraction depuis l’API Baserow (`get_data_baserow.py`)
    - Traitement des contenus, regroupement des pratiques, analyse automatique (`analyse_auto.py`, `clusters_pratique.py`)
-   - Format RDF sémantique pour tests de structuration et interopérabilité (`pci_exemple_memoire.rdf`)
+   - Format RDF sémantique pour tests de structuration et interopérabilité (`rdf_export.py`)
 
 3. **Visualisation**  
    Le fichier `network_test.html` permet de visualiser dynamiquement le réseau d’acteurs, de pratiques et de lieux. Il met en évidence les liens entre les répondants, les types de savoirs, et leur ancrage territorial.
