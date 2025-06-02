@@ -49,7 +49,7 @@ Le dossier contient les éléments suivants :
 
 ### RDF (prototype sémantique)
 
-- [`pci_exemple_memoire.rdf`](export_rdf.py) : Exemple d’export RDF utilisant les vocabulaires SKOS et CIDOC CRM  
+- [`pci_exemple_memoire.rdf`](rdf_export.py) : Exemple d’export RDF utilisant les vocabulaires SKOS et CIDOC CRM  
 
 ## Accès aux visualisations et interfaces
 
