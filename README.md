@@ -55,8 +55,8 @@ Le dossier contient les éléments suivants :
 
 Ces fichiers sont consultables localement ou via GitHub Pages :
 
-- Formulaire de collecte : [Ouvrir `index.html`](index.html)
-- Visualisation réseau : [Ouvrir `network_test.html`](network_test.html)
+- Formulaire de collecte : [Ouvrir `https://josephgrob.github.io/pci-cartographie-lavaux/index.html`](index.html)
+- Visualisation réseau : [Ouvrir `https://josephgrob.github.io/pci-cartographie-lavaux/network_test.html`](network_test.html)
 - Données en ligne (Baserow) : [https://baserow.io/database/212725/table/510775/930756](https://baserow.io/database/212725/table/510775/930756)
 
 ## Accès à distance
