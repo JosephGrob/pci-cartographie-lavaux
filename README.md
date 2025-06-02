@@ -49,14 +49,14 @@ Le dossier contient les éléments suivants :
 
 ### RDF (prototype sémantique)
 
-- [`pci_exemple_memoire.rdf`](pci_exemple_memoire.rdf) : Exemple d’export RDF utilisant les vocabulaires SKOS et CIDOC CRM  
+- [`pci_exemple_memoire.rdf`](export_rdf.py) : Exemple d’export RDF utilisant les vocabulaires SKOS et CIDOC CRM  
 
 ## Accès aux visualisations et interfaces
 
 Ces fichiers sont consultables localement ou via GitHub Pages :
 
-- Formulaire de collecte : [Ouvrir `index.html`](https://josephgrob.github.io/pci-cartographie-lavaux/index.html)
-- Visualisation réseau : [Ouvrir `network_test.html`](https://josephgrob.github.io/pci-cartographie-lavaux/network_test.html)
+- Formulaire de collecte : [Ouvrir](https://josephgrob.github.io/pci-cartographie-lavaux/index.html)
+- Visualisation réseau : [Ouvrir](https://josephgrob.github.io/pci-cartographie-lavaux/network_test.html)
 - Données en ligne (Baserow) : [https://baserow.io/database/212725/table/510775/930756](https://baserow.io/database/212725/table/510775/930756)
 
 ## Accès à distance
