@@ -242,6 +242,8 @@
 
 <script>
   const drawnItemsMap = {}; 
+  const lieuSearchCache = {};
+
 
 
   // Enregistre les états de chaque zone d’étude
@@ -441,6 +443,15 @@
 
         <label>Âge de chaque personne :</label>
         <input type="text" name="ages_famille" placeholder="Ex: 25, 59, 63"><br>
+
+        <div id="famille_lieu_wrapper">
+          <label id="famille_lieu_label" for="user_lieu">Lieu :</label>
+          <input type="text" name="user_lieu" id="user_lieu" placeholder="Commencez à taper un lieu...">
+          <div id="user_lieu_result" class="autocomplete-results"></div>
+          <div id="user_lieu_confirm" style="font-style: italic; color: green; margin-top: 5px;"></div>
+          <input type="hidden" name="user_lieu_lat" id="user_lieu_lat">
+          <input type="hidden" name="user_lieu_lon" id="user_lieu_lon">
+        </div>
       `;
     } else if (["association", "entreprise", "collectif"].includes(type)) {
       html += `
@@ -1091,7 +1102,7 @@
       if (typeSelect.value === "commune") updateCommuneFields();
     }
 
-    document.getElementById("type").value = "commune";
+    document.getElementById("type").value = "";
     updateIdentityFields();
     updateCommuneFields();
 
@@ -1128,6 +1139,17 @@
       return;
     }
 
+    // Affiche recherche en cours
+    resultContainer.innerHTML = "<div style='padding: 8px; font-style: italic; color: #888;'>Recherche en cours...</div>";
+    resultContainer.style.display = "block";
+
+    // Vérifie si la requête est déjà dans le cache
+    if (lieuSearchCache[query]) {
+      afficherResultats(inputEl, resultContainer, lieuSearchCache[query]);
+      return;
+    }
+
+
     // Masquer la boîte par défaut
     resultContainer.style.display = "none";
 
@@ -1142,58 +1164,115 @@
     debounceTimeout = setTimeout(() => {
       console.log("📡 Recherche de lieu : ", query);
 
-      fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&addressdetails=1&email=grob.j1890@gmail.com`)
-        .then(res => res.json())
-        .then(data => {
-          resultContainer.innerHTML = "";
+    fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=5&lang=fr`)
+      .then(response => response.json())
+      .then(data => {
+        lieuSearchCache[query] = data; // Mise en cache
 
-          if (!data || data.length === 0) {
-            console.warn("❌ Aucun résultat");
+        resultContainer.innerHTML = "";
+
+        if (!data || !data.features || data.features.length === 0) {
+          resultContainer.innerHTML = "<div style='padding: 8px; color: #888;'>Aucun lieu trouvé</div>";
+          resultContainer.style.display = "block";
+          return;
+        }
+
+        resultContainer.style.display = "block";
+
+        data.features.forEach(feature => {
+          const label =
+            feature.properties.name +
+            (feature.properties.city ? `, ${feature.properties.city}` : "") +
+            (feature.properties.country ? `, ${feature.properties.country}` : "");
+
+          const option = document.createElement("div");
+          option.className = "autocomplete-option";
+          option.textContent = label;
+
+          option.onclick = () => {
+            inputEl.value = label;
+            resultContainer.innerHTML = "";
             resultContainer.style.display = "none";
-            return;
-          }
 
-          resultContainer.style.display = "block"; 
+            const lat = feature.geometry.coordinates[1];
+            const lon = feature.geometry.coordinates[0];
 
-          data.forEach(place => {
-            const option = document.createElement("div");
-            option.className = "autocomplete-option";
-            option.textContent = place.display_name;
+            const baseId = inputEl.id.replace(/_lieu$/, "");
+            const latInput = document.getElementById(`${baseId}_lieu_lat`);
+            const lonInput = document.getElementById(`${baseId}_lieu_lon`);
+            const confirmBox = document.getElementById(`${baseId}_lieu_confirm`);
 
-            option.onclick = () => {
-              inputEl.value = place.display_name;
-              resultContainer.innerHTML = "";
-              resultContainer.style.display = "none";
+            if (latInput && lonInput) {
+              latInput.value = lat;
+              lonInput.value = lon;
+            }
 
-              // Injection des coordonnées
-              const baseId = inputEl.id.replace(/_lieu$/, ""); 
-              const latInput = document.getElementById(`${baseId}_lieu_lat`);
-              const lonInput = document.getElementById(`${baseId}_lieu_lon`);
-              const confirmBox = document.getElementById(`${baseId}_lieu_confirm`);
+            if (confirmBox) {
+              confirmBox.innerHTML = `
+                ✅ Lieu sélectionné : <strong>${label}</strong><br>
+                🌍 Coordonnées : ${lat.toFixed(5)}, ${lon.toFixed(5)}
+              `;
+            }
+          };
 
-              if (latInput && lonInput) {
-                latInput.value = place.lat;
-                lonInput.value = place.lon;
-                console.log("✅ Coordonnées enregistrées");
-              }
-
-              if (confirmBox) {
-                confirmBox.innerHTML = `✅ Lieu sélectionné : <strong>${place.display_name}</strong><br>
-                🌍 Coordonnées : ${parseFloat(place.lat).toFixed(5)}, ${parseFloat(place.lon).toFixed(5)}`;
-              }
-            };
-
-            resultContainer.appendChild(option);
-          });
-        })
-        .catch(error => {
-          console.error("💥 Erreur lors de l'appel à Nominatim :", error);
+          resultContainer.appendChild(option);
         });
+      })
+      .catch(error => {
+        console.error("💥 Erreur lors de l'appel à Photon :", error);
+        resultContainer.innerHTML = "<div style='padding: 8px; color: red;'>Erreur de recherche</div>";
+        resultContainer.style.display = "block";
+      });
+
 
     }, 400); 
   }
 
 
+  function afficherResultats(inputEl, resultContainer, data) {
+    resultContainer.innerHTML = "";
+
+    if (!data.features || data.features.length === 0) {
+      resultContainer.innerHTML = "<div style='padding: 8px; color: #888;'>Aucun lieu trouvé</div>";
+      return;
+    }
+
+    data.features.forEach(feature => {
+      const label = feature.properties.name +
+        (feature.properties.city ? `, ${feature.properties.city}` : "") +
+        (feature.properties.country ? `, ${feature.properties.country}` : "");
+
+      const option = document.createElement("div");
+      option.className = "autocomplete-option";
+      option.textContent = label;
+
+      option.onclick = () => {
+        inputEl.value = label;
+        resultContainer.innerHTML = "";
+        resultContainer.style.display = "none";
+
+        const lat = feature.geometry.coordinates[1];
+        const lon = feature.geometry.coordinates[0];
+
+        const baseId = inputEl.id.replace(/_lieu$/, "");
+        const latInput = document.getElementById(`${baseId}_lieu_lat`);
+        const lonInput = document.getElementById(`${baseId}_lieu_lon`);
+        const confirmBox = document.getElementById(`${baseId}_lieu_confirm`);
+
+        if (latInput && lonInput) {
+          latInput.value = lat;
+          lonInput.value = lon;
+        }
+
+        if (confirmBox) {
+          confirmBox.innerHTML = `✅ Lieu sélectionné : <strong>${label}</strong><br>
+          🌍 Coordonnées : ${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+        }
+      };
+
+      resultContainer.appendChild(option);
+    });
+  }
 
 
 
@@ -1444,9 +1523,16 @@
       }
     });
 
-    if (formData.get("transmission_intention")) {
-      data.transmission_intention = formData.get("transmission_intention");
+    const transmissionIntention = formData.get("transmission_intention");
+    if (transmissionIntention && transmissionIntention !== "" && transmissionIntention !== "-- Choisissez une option --") {
+      data.transmission_intention = transmissionIntention;
     }
+
+    if (!data.transmission_intention) {
+      delete data.transmission_intention;
+    }
+
+
 
 
     // Ajoute les zones dessinées (GeoJSON)
@@ -1857,7 +1943,14 @@
     if (liensSection) {
       liensSection.style.display = isFamille ? "none" : "block";
     }
+
+    // Adapter le label du lieu
+    const labelLieu = document.getElementById("famille_lieu_label");
+    if (labelLieu) {
+      labelLieu.innerText = isFamille ? "Lieu de résidence :" : "Zone ou territoire :";
+    }
   }
+
 
 
   function updateCommuneFields() {

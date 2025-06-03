@@ -245,19 +245,34 @@
       function updateNodeData(node, updates, isAuthor = false) {
         for (const key in updates) {
           const value = updates[key];
-          if (!value || typeof value !== "string" || value.trim() === "") continue;
 
+          if (value === undefined || value === null) continue;
+
+          // Initialiser le champ s’il n’existe pas
           if (!node.meta[key]) node.meta[key] = [];
 
+          // 🖼️ Cas spécial : champ media (tableau d'objets)
+          if (key === "fichier_media" && Array.isArray(value)) {
+            value.forEach(media => {
+              if (!media?.url) return;
+              const alreadyExists = node.meta[key].some(item => item.url === media.url);
+              if (!alreadyExists) {
+                node.meta[key].push(media);
+              }
+            });
+            continue; // on passe au champ suivant
+          }
+
+          // 🧾 Autres champs texte classiques (string)
+          if (typeof value !== "string" || value.trim() === "") continue;
+
+          // Si auteur principal : supprimer les doublons venant de "collab"
           if (isAuthor) {
-            // Supprimer les valeurs "collab" uniquement si on ajoute une valeur "author" pour ce champ
             node.meta[key] = node.meta[key].filter(item => {
               return item.source !== "collab" || item.value !== value;
             });
           }
 
-
-          // N'ajouter que si la valeur n'existe pas déjà
           const alreadyExists = node.meta[key].some(item => item.value === value);
           if (!alreadyExists) {
             node.meta[key].push({
@@ -268,12 +283,15 @@
         }
       }
 
+
       rows.forEach(row => {
         const author = row.nom?.trim();
         const authorType = row.type;
+        console.log("🖼️ fichier_media pour", row.nom, ":", row.fichier_media);
         const role = row.role;
         let resolvedAuthorId; 
 
+  
 
         // ---- Auteur principal
         if (author) {
@@ -297,7 +315,8 @@
 
             user_lieu: row.user_lieu,
             memoire: row.memoire,
-            evenement: row.evenement
+            evenement: row.evenement,
+            fichier_media: row.fichier_media
           }, true); 
 
         }
@@ -444,8 +463,14 @@
                 label: "Lieu",
                 group: "zone",
                 title: "Cliquez pour voir la carte",
-                geojson: feature
+                geojson: feature,
+                name:
+                  typeof feature.properties?.zone === "string"
+                    ? feature.properties.zone.toLowerCase().trim()
+                    : ""
+
               });
+
 
               edges.push({
                 from: resolvedAuthorId,
@@ -511,31 +536,46 @@
       function generateCustomDetails(meta, type) {
         if (!meta) return "<em>Aucune information disponible</em>";
 
-        const get = key => {
-          const list = meta[key];
-          if (!list || list.length === 0) return null;
-          return list.map(entry => entry.value).join("<br>");
-        };
-
         const allKeys = Object.keys(meta).sort();
         let output = `<div class="meta-details">`;
 
         for (const key of allKeys) {
-          if (key === "type") continue; 
+          if (key === "type") continue;
 
-          const value = get(key);
-          if (!value) continue;
+          const list = meta[key];
+          if (!list || list.length === 0) continue;
 
           const [label, description] = keyLabels[key] || [key, ""];
+          let valueHtml = "";
+          if (key === "fichier_media") {
+            valueHtml = list.map(entry => {
+              const url = entry.url;
+              if (!url) return "";
+
+              const extension = url.split('.').pop().toLowerCase();
+
+              if (["jpg", "jpeg", "png", "gif", "webp"].includes(extension)) {
+                return `<img src="${url}" alt="${entry.visible_name || "image"}" style="max-width: 100%; margin: 10px 0; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.1);" />`;
+              } else if (["mp4", "webm", "ogg"].includes(extension)) {
+                return `<video controls style="max-width:100%; margin: 10px 0; border-radius: 6px;"><source src="${url}" type="video/${extension}">Votre navigateur ne supporte pas la vidéo.</video>`;
+              } else if (["mp3", "wav", "ogg"].includes(extension)) {
+                return `<audio controls style="width:100%; margin: 10px 0;"><source src="${url}" type="audio/${extension}">Votre navigateur ne supporte pas l'audio.</audio>`;
+              } else {
+                return `<a href="${url}" target="_blank" style="margin: 10px 0; display: inline-block;">📎 ${entry.visible_name || "Fichier"}</a>`;
+              }
+            }).join("<br>");
+          } else {
+            valueHtml = list.map(entry => entry.value).join("<br>");
+          }
+
           output += `
             <div class="meta-field">
               <strong>${label}:</strong><br>
-              <div class="meta-value">${value}</div>
+              <div class="meta-value">${valueHtml}</div>
               ${description ? `<div class="meta-desc"><em>${description}</em></div>` : ""}
             </div><hr>
           `;
         }
-
 
         output += `</div>`;
         return output;
@@ -707,6 +747,7 @@
               map.fitBounds(L.geoJSON(geojson).getBounds());
             }, 50);
           } else {
+
             document.getElementById("info-content").innerHTML = `
               <h3>${nodeData.label}</h3>
               <p><strong>Type</strong>: ${nodeData.group}</p>
@@ -1059,17 +1100,49 @@
 
       // 🟧 Zones
       Array.from(nodesMap.values()).forEach(node => {
-        if (node.group === "zone" && node.geojson) {
-          const geoLayer = L.geoJSON(node.geojson, {
-            style: {
-              color: "#e67e22",
-              weight: 2,
-              fillOpacity: 0.2
-            }
-          })
-            .bindPopup(`<strong>${node.label}</strong>`)
-            .addTo(markersLayer);
+        if (node.group === "zone") {
+          console.log("🧭 Vérification nom zone:", node.name, "→", node);
+        }
 
+        if (
+          node.group === "zone" &&
+          node.geojson &&
+          node.geojson.properties &&
+          !["centrale", "tampon"].includes(node.name || "")
+        ) {
+          const geometryType = node.geojson.geometry?.type;
+
+          // 🟠 Point dessiné → on le traite comme un marqueur
+          if (geometryType === "Point") {
+            const coords = [
+              node.geojson.geometry.coordinates[1],
+              node.geojson.geometry.coordinates[0]
+            ];
+
+            const marker = L.circleMarker(coords, {
+              radius: 8,
+              color: "#e67e22",
+              fillColor: "#e67e22",
+              fillOpacity: 0.8,
+              weight: 1
+            })
+              .bindPopup(`<strong>${node.label}</strong>`)
+              .addTo(markersLayer);
+
+            leafletMarkers.set(node.id, marker);
+            node._mapCoords = coords;
+
+          } else {
+            // 🟠 Polygone ou MultiPolygon
+            const geoLayer = L.geoJSON(node.geojson, {
+              style: {
+                color: "#e67e22",
+                weight: 2,
+                fillOpacity: 0.2
+              }
+            })
+              .bindPopup(`<strong>${node.label}</strong>`)
+              .addTo(markersLayer);
 
             geoLayer.on('click', () => {
               const panel = document.getElementById("info-panel");
@@ -1093,12 +1166,13 @@
               }, 50);
             });
 
-
-          node._bounds = geoLayer.getBounds();
-          node._center = geoLayer.getBounds().getCenter();
-          leafletZones.set(node.id, geoLayer);
+            node._bounds = geoLayer.getBounds();
+            node._center = geoLayer.getBounds().getCenter();
+            leafletZones.set(node.id, geoLayer);
+          }
         }
       });
+
 
       // Lignes entre nœuds (personne ↔ personne ou personne ↔ zone)
       edges.forEach(edge => {
