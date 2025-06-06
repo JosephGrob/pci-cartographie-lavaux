@@ -57,7 +57,7 @@ Ces fichiers sont consultables localement ou via GitHub Pages :
 
 - Formulaire de collecte : [Ouvrir](https://josephgrob.github.io/pci-cartographie-lavaux/index.html)
 - Visualisation réseau : [Ouvrir](https://josephgrob.github.io/pci-cartographie-lavaux/network_test.html)
-- Données en ligne (Baserow) : [https://baserow.io/database/212725/table/510775/930756](https://baserow.io/database/212725/table/510775/930756)
+- Données en ligne (Baserow) : https://baserow.io/public/grid/9qKrvm3TS3b9LcambCqkfOeBHrougPpvHNBARHzU2NM
 
 ## Accès à distance
 
