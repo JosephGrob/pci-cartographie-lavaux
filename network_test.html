@@ -154,6 +154,9 @@
     <button id="toggle-map" style="background-color: #27ae60; color: white; border: none; padding: 10px 16px; border-radius: 6px; font-size: 15px; cursor: pointer; margin: 4px;">
       🗺️ Afficher la carte
     </button>
+    <button id="toggle-network-map" style="background-color: #8e44ad; color: white; border: none; padding: 10px 16px; border-radius: 6px; font-size: 15px; cursor: pointer; margin: 4px;">
+    Réseau + carte
+    </button>
   </div>
 
   <p style="font-style: italic; color: #555;">
@@ -197,6 +200,8 @@
   <script>
 
     let nodesMap = new Map(); 
+    let data; // ← rendre global
+
 
     function findSimilarNode(nom, age, nodesMap) {
       for (const [id, node] of nodesMap.entries()) {
@@ -251,7 +256,7 @@
           // Initialiser le champ s’il n’existe pas
           if (!node.meta[key]) node.meta[key] = [];
 
-          // 🖼️ Cas spécial : champ media (tableau d'objets)
+          // Cas spécial : champ media (tableau d'objets)
           if (key === "fichier_media" && Array.isArray(value)) {
             value.forEach(media => {
               if (!media?.url) return;
@@ -260,10 +265,10 @@
                 node.meta[key].push(media);
               }
             });
-            continue; // on passe au champ suivant
+            continue; 
           }
 
-          // 🧾 Autres champs texte classiques (string)
+          //Autres champs texte classiques (string)
           if (typeof value !== "string" || value.trim() === "") continue;
 
           // Si auteur principal : supprimer les doublons venant de "collab"
@@ -335,7 +340,7 @@
             dynCollabs = row.collaborations_dynamiques;
           }
         } catch (e) {
-          console.warn("❌ Impossible de parser collaborations_dynamiques :", e);
+          console.warn("Impossible de parser collaborations_dynamiques :", e);
         }
 
         if (Array.isArray(dynCollabs)) {
@@ -483,7 +488,7 @@
             });
 
           } catch (e) {
-            console.error("⛔ Erreur de parsing GeoJSON :", e);
+            console.error("Erreur de parsing GeoJSON :", e);
           }
         }
       });
@@ -671,7 +676,7 @@
 
 
       const container = document.getElementById("network");
-      const data = { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) };
+      data = { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) };
 
       options = {
         nodes: {
@@ -729,6 +734,35 @@
         if (params.nodes.length > 0) {
           const nodeId = params.nodes[0];
           const nodeData = nodesMap.get(nodeId);
+          
+
+          // Zoom sur la carte même si _mapCoords ou _bounds ne sont pas encore définis
+          if (leafletMap && nodeData) {
+            if (!nodeData._mapCoords && nodeData.meta) {
+              const coords = getNodeCoords(nodeData.meta);
+              if (coords) nodeData._mapCoords = coords;
+            }
+
+            if (!nodeData._bounds && nodeData.geojson) {
+              try {
+                nodeData._bounds = L.geoJSON(nodeData.geojson).getBounds();
+              } catch (e) {
+                console.warn("Impossible de calculer les bounds :", e);
+              }
+            }
+
+            if (nodeData._mapCoords) {
+              leafletMap.setView(nodeData._mapCoords, 15, { animate: true });
+            } else if (nodeData._bounds) {
+              leafletMap.fitBounds(nodeData._bounds, { padding: [20, 20] });
+            }
+
+            // Clignotement sur la carte
+            const marker = leafletMarkers.get(nodeId);
+            const zoneLayer = leafletZones.get(nodeId);
+            blinkLeafletLayer(marker || zoneLayer);
+          }
+          
 
           if (nodeData.group === "zone" && nodeData.geojson) {
             const geojson = nodeData.geojson;
@@ -757,12 +791,43 @@
 
           } else if (params.edges.length > 0) {
             const edgeId = params.edges[0];
+            blinkLeafletLine(edgeId);
             const edgeData = data.edges.get(edgeId);
+
+
+            // Clignotement
+            blinkLeafletLine(edgeId);
+
+            // Zoom sur la ligne sur la carte
+            const fromNode = nodesMap.get(edgeData.from);
+            const toNode = nodesMap.get(edgeData.to);
+
+            const fromCoords = fromNode?._mapCoords || fromNode?._center;
+            const toCoords = toNode?._mapCoords || toNode?._center;
+
+            if (leafletMap && fromCoords && toCoords) {
+              const bounds = L.latLngBounds([fromCoords, toCoords]);
+              leafletMap.fitBounds(bounds, { padding: [40, 40] });
+            }
+
+
 
             const fromLabel = nodesMap.get(edgeData.from)?.label || edgeData.from;
             const toLabel = nodesMap.get(edgeData.to)?.label || edgeData.to;
 
             const isZoneLink = (fromLabel === "Lieu" || toLabel === "Lieu") || toLabel.includes("zone");
+
+
+            // Zoom sur la zone si lien vers une zone
+            if (leafletMap && fromLabel === "Lieu" || toLabel === "Lieu") {
+              const targetNode = nodesMap.get(edgeData.to);
+              if (targetNode && targetNode._mapCoords) {
+                leafletMap.setView(targetNode._mapCoords, 15, { animate: true });
+              } else if (targetNode && targetNode._bounds) {
+                leafletMap.fitBounds(targetNode._bounds, { padding: [20, 20] });
+              }
+            }
+
 
             if (isZoneLink) {
               const relation = edgeData.label || "lien au territoire";
@@ -814,27 +879,37 @@
 
       });
 
-      console.log("✅ Boutons acteurs ajoutés, mise en place des événements...");
+      console.log("Boutons acteurs ajoutés, mise en place des événements...");
 
       document.addEventListener("click", function (e) {
+        console.log("CLIC ACTEUR détecté (document listener)");
+
         const btn = e.target.closest(".actor-btn");
         if (!btn) return;
 
         const selectedId = btn.dataset.id;
+        console.log("ID sélectionné :", selectedId);
+
+        const isCarteSeule =
+          document.getElementById("leaflet-map").style.display === "block" &&
+          document.getElementById("network").style.display === "none";
+        console.log("Mode actif :", isCarteSeule ? "Carte SEULE" : "Autre mode (réseau ou mixte)");
 
         // Récupère les arêtes directement reliées AU SEUL nœud cliqué
         const directlyConnectedEdges = data.edges.get({
           filter: edge => edge.from === selectedId || edge.to === selectedId
         });
+        console.log(" Arêtes liées :", directlyConnectedEdges);
 
-        // On récupère les ID des nœuds connectés (y compris le nœud cliqué lui-même)
         const directlyConnectedNodeIds = new Set([selectedId]);
         directlyConnectedEdges.forEach(edge => {
           directlyConnectedNodeIds.add(edge.from);
           directlyConnectedNodeIds.add(edge.to);
         });
+        console.log("Nœuds connectés :", Array.from(directlyConnectedNodeIds));
 
-        // Met à jour l'opacité des nœuds
+        // Réseau (vis.js)
+        console.log(" Mise à jour du réseau (vis.js)...");
         data.nodes.getIds().forEach(id => {
           const node = network.body.nodes[id];
           if (node) {
@@ -842,7 +917,6 @@
           }
         });
 
-        // Met à jour l'opacité des arêtes
         data.edges.getIds().forEach(id => {
           const edge = data.edges.get(id);
           const isDirect = edge.from === selectedId || edge.to === selectedId;
@@ -860,25 +934,29 @@
           }
         });
 
-        // Carte : met à jour les marqueurs
+        // Carte
+        console.log("Mise à jour des marqueurs...");
+        console.log("Carte affichée ? ", leafletMap && leafletMap._container?.style.display);
         leafletMarkers.forEach((marker, id) => {
           const isDirect = directlyConnectedNodeIds.has(id);
+          console.log("Marker modifié :", id, "→", marker);
           marker.setStyle({
             fillOpacity: isDirect ? 0.8 : 0.05,
             opacity: isDirect ? 1 : 0.05
           });
         });
 
-        // Carte : met à jour les zones
+        console.log("Mise à jour des zones...");
         leafletZones.forEach((geoLayer, zoneId) => {
           const isDirect = directlyConnectedNodeIds.has(zoneId);
+          console.log("Zone modifiée :", zoneId, "→", geoLayer);
           geoLayer.setStyle({
             fillOpacity: isDirect ? 0.2 : 0.01,
             opacity: isDirect ? 1 : 0.05
           });
         });
 
-        // Carte : met à jour les lignes
+        console.log(" Mise à jour des lignes...");
         leafletLines.forEach((line, key) => {
           const parts = key.split("-");
           const from = parts[1];
@@ -889,6 +967,7 @@
           });
         });
       });
+
 
 
 
@@ -997,59 +1076,38 @@
     let leafletMarkers = new Map();
     let leafletLines = new Map();
 
-    document.getElementById("toggle-map").addEventListener("click", () => {
-      const mapDiv = document.getElementById("leaflet-map");
-      const netDiv = document.getElementById("network");
-      const toggleBtn = document.getElementById("toggle-map");
 
-      const isVisible = mapDiv.style.display === "block";
-      mapDiv.style.display = isVisible ? "none" : "block";
-      netDiv.style.display = isVisible ? "block" : "none";
-
-
-      toggleBtn.textContent = isVisible ? "🗺️ Afficher la carte" : "🔁 Retour au réseau";
-
-      if (isVisible) {
-        setTimeout(() => {
-          if (network && typeof network.redraw === "function") {
-            network.redraw(); // Forcer recalcul taille
-            network.fit({
-              animation: {
-                duration: 500,
-                easingFunction: "easeInOutQuad"
-              }
-            });
-          }
-        }, 100);
+    function initLeafletMap() {
+        // Nettoyage
+      if (leafletMap) {
+        leafletMap.remove();
+        document.getElementById("leaflet-map").innerHTML = "";
       }
 
+      document.getElementById("info-panel").style.display = "none";
+      document.getElementById("info-content").innerHTML = "Cliquez sur un nœud pour voir les détails";
+
+      leafletMap = L.map("leaflet-map").setView([46.5, 6.7], 12);
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+        attribution: "&copy; OpenStreetMap contributors"
+      }).addTo(leafletMap);
+
+      markersLayer = L.featureGroup().addTo(leafletMap);
+      leafletMarkers.clear();
+      leafletLines.clear();
+    }
 
 
-      if (!isVisible) {
-        if (leafletMap) {
-          leafletMap.remove();
-          document.getElementById("info-panel").style.display = "none";
-          document.getElementById("info-content").innerHTML = "Cliquez sur un nœud pour voir les détails";
+    function populateLeafletMap() {
+      markersLayer.clearLayers();
+      leafletMarkers.clear();
+      leafletLines.clear();
+      leafletZones.clear();
 
-
-          document.getElementById("leaflet-map").innerHTML = "";
-        }
-
-        leafletMap = L.map("leaflet-map").setView([46.5, 6.7], 12);
-        L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-          attribution: "&copy; OpenStreetMap contributors"
-        }).addTo(leafletMap);
-
-        markersLayer = L.featureGroup().addTo(leafletMap);
-        leafletMarkers.clear();
-        leafletLines.clear();
-      }
-
-      // 📍 Ajout des marqueurs
+      // Ajout des marqueurs (personnes, entités)
       Array.from(nodesMap.values()).forEach(node => {
         const coords = getNodeCoords(node.meta || {});
         if (!coords) return;
-        
 
         const color = options.groups[node.group]?.color || "#3498db";
 
@@ -1065,7 +1123,9 @@
 
         marker.on('click', () => {
           const panel = document.getElementById("info-panel");
-          panel.style.display = "block"; 
+          panel.style.display = "block";
+
+          blinkNetworkNode(node.id);
 
           if (node.group === "zone" && node.geojson) {
             const geojson = node.geojson;
@@ -1092,89 +1152,102 @@
           }
         });
 
-
-
         leafletMarkers.set(node.id, marker);
         node._mapCoords = coords;
       });
 
-      // 🟧 Zones
+      // Zones (polygones ou points)
       Array.from(nodesMap.values()).forEach(node => {
-        if (node.group === "zone") {
-          console.log("🧭 Vérification nom zone:", node.name, "→", node);
-        }
+        if (node.group !== "zone" || !node.geojson) return;
+        if (["centrale", "tampon"].includes(node.name || "")) return;
 
-        if (
-          node.group === "zone" &&
-          node.geojson &&
-          node.geojson.properties &&
-          !["centrale", "tampon"].includes(node.name || "")
-        ) {
-          const geometryType = node.geojson.geometry?.type;
+        const geometryType = node.geojson.geometry?.type;
 
-          // 🟠 Point dessiné → on le traite comme un marqueur
-          if (geometryType === "Point") {
-            const coords = [
-              node.geojson.geometry.coordinates[1],
-              node.geojson.geometry.coordinates[0]
-            ];
+        if (geometryType === "Point") {
+          const coords = [
+            node.geojson.geometry.coordinates[1],
+            node.geojson.geometry.coordinates[0]
+          ];
 
-            const marker = L.circleMarker(coords, {
-              radius: 8,
-              color: "#e67e22",
-              fillColor: "#e67e22",
-              fillOpacity: 0.8,
-              weight: 1
-            })
-              .bindPopup(`<strong>${node.label}</strong>`)
-              .addTo(markersLayer);
+          const marker = L.circleMarker(coords, {
+            radius: 8,
+            color: "#e67e22",
+            fillColor: "#e67e22",
+            fillOpacity: 0.8,
+            weight: 1
+          })
+            .bindPopup(`<strong>${node.label}</strong>`)
+            .addTo(markersLayer);
 
-            leafletMarkers.set(node.id, marker);
-            node._mapCoords = coords;
+          marker.on('click', () => {
+            document.getElementById("info-panel").style.display = "block";
 
-          } else {
-            // 🟠 Polygone ou MultiPolygon
-            const geoLayer = L.geoJSON(node.geojson, {
-              style: {
+            blinkNetworkNode(node.id);
+            document.getElementById("info-content").innerHTML = `
+              <h3>Zone d’étude</h3>
+              <div id="mini-map" style="height: 250px; border-radius: 6px; margin-top: 10px;"></div>
+            `;
+            setTimeout(() => {
+              const map = L.map("mini-map").setView(coords, 14);
+              L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                attribution: "&copy; OpenStreetMap contributors"
+              }).addTo(map);
+              L.circleMarker(coords, {
+                radius: 8,
                 color: "#e67e22",
-                weight: 2,
-                fillOpacity: 0.2
-              }
-            })
-              .bindPopup(`<strong>${node.label}</strong>`)
-              .addTo(markersLayer);
+                fillColor: "#e67e22",
+                fillOpacity: 0.8,
+                weight: 1
+              }).addTo(map);
+            }, 50);
+          });
 
-            geoLayer.on('click', () => {
-              const panel = document.getElementById("info-panel");
-              const geojson = node.geojson;
-              document.getElementById("info-panel").style.display = "block";
+          leafletMarkers.set(node.id, marker);
+          node._mapCoords = coords;
+          node._center = coords; 
+          node._bounds = L.latLngBounds([coords]); 
 
-              document.getElementById("info-content").innerHTML = `
-                <h3>Zone d’étude</h3>
-                <div id="mini-map" style="height: 250px; border-radius: 6px; margin-top: 10px;"></div>
-              `;
+        } else {
+          const geoLayer = L.geoJSON(node.geojson, {
+            style: {
+              color: "#e67e22",
+              weight: 2,
+              fillOpacity: 0.2
+            }
+          })
+            .bindPopup(`<strong>${node.label}</strong>`)
+            .addTo(markersLayer);
 
-              setTimeout(() => {
-                const map = L.map("mini-map").setView([46.5, 6.7], 13);
-                L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-                  attribution: "&copy; OpenStreetMap contributors"
-                }).addTo(map);
-                L.geoJSON(geojson, {
-                  style: { color: "#e67e22", weight: 2 }
-                }).addTo(map);
-                map.fitBounds(L.geoJSON(geojson).getBounds());
-              }, 50);
-            });
+          geoLayer.on('click', () => {
+            const geojson = node.geojson;
+            document.getElementById("info-panel").style.display = "block";
+            document.getElementById("info-content").innerHTML = `
+              <h3>Zone d’étude</h3>
+              <div id="mini-map" style="height: 250px; border-radius: 6px; margin-top: 10px;"></div>
+            `;
 
-            node._bounds = geoLayer.getBounds();
-            node._center = geoLayer.getBounds().getCenter();
-            leafletZones.set(node.id, geoLayer);
-          }
+            setTimeout(() => {
+              const map = L.map("mini-map").setView([46.5, 6.7], 13);
+              L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                attribution: "&copy; OpenStreetMap contributors"
+              }).addTo(map);
+              L.geoJSON(geojson, {
+                style: { color: "#e67e22", weight: 2 }
+              }).addTo(map);
+              map.fitBounds(L.geoJSON(geojson).getBounds());
+            }, 50);
+            blinkNetworkNode(node.id);
+          });
+
+          node._bounds = geoLayer.getBounds();
+          node._center = geoLayer.getBounds().getCenter();
+          leafletZones.set(node.id, geoLayer);
         }
+
       });
 
 
-      // Lignes entre nœuds (personne ↔ personne ou personne ↔ zone)
+      // Lignes entre nœuds (réseau sur la carte)
       edges.forEach(edge => {
         const fromNode = nodesMap.get(edge.from);
         const toNode = nodesMap.get(edge.to);
@@ -1182,10 +1255,7 @@
         const fromCoords = fromNode?._mapCoords || fromNode?._center;
         const toCoords = toNode?._mapCoords || toNode?._center;
 
-        if (!fromCoords || !toCoords) {
-          console.warn("⛔ Lien ignoré car coordonnées manquantes :", edge);
-          return;
-        }
+        if (!fromCoords || !toCoords) return;
 
         const isZoneLink = fromNode.group === "zone" || toNode.group === "zone";
         const keyPrefix = isZoneLink ? "zone" : "edge";
@@ -1201,14 +1271,67 @@
           .addTo(markersLayer);
 
         leafletLines.set(key, line);
+
+        line.on("click", () => {
+          console.log("Ligne Leaflet cliquée :", key);
+
+          // Trouver l'arête dans le dataset vis.js
+          const matchingEdgeId = data.edges.getIds().find(id => {
+            const edgeData = data.edges.get(id);
+            return edgeData.from === edge.from && edgeData.to === edge.to;
+          });
+
+          if (matchingEdgeId) {
+            blinkOnlyNetworkEdge(matchingEdgeId);
+          } else {
+            console.warn("Aucune arête réseau trouvée pour", edge.from, "→", edge.to);
+          }
+        });
+
+
+
       });
 
-      // Centrer la carte
+      // Centrage final de la carte
       const bounds = markersLayer.getBounds();
       if (bounds.isValid()) {
         leafletMap.fitBounds(bounds, { padding: [20, 20] });
       }
+    }
+    
+
+
+    document.getElementById("toggle-map").addEventListener("click", () => {
+      const mapDiv = document.getElementById("leaflet-map");
+      const netDiv = document.getElementById("network");
+      const toggleBtn = document.getElementById("toggle-map");
+
+      const isVisible = mapDiv.style.display === "block";
+      mapDiv.style.display = isVisible ? "none" : "block";
+      netDiv.style.display = isVisible ? "block" : "none";
+
+      toggleBtn.textContent = isVisible ? "Afficher la carte" : "Retour au réseau";
+
+      if (isVisible) {
+        setTimeout(() => {
+          if (network && typeof network.redraw === "function") {
+            network.redraw(); 
+            network.fit({
+              animation: {
+                duration: 500,
+                easingFunction: "easeInOutQuad"
+              }
+            });
+          }
+        }, 100);
+      }
+
+      if (!isVisible) {
+        initLeafletMap();      
+        populateLeafletMap();  
+      }
     });
+
 
 
     document.getElementById("toggle-actor-list").addEventListener("click", () => {
@@ -1222,6 +1345,211 @@
         container.style.maxHeight = container.scrollHeight + "px";
       }
     });
+
+    document.getElementById("toggle-network-map").addEventListener("click", () => {
+      const mapDiv = document.getElementById("leaflet-map");
+      const netDiv = document.getElementById("network");
+
+      // Affiche les deux
+      mapDiv.style.display = "block";
+      netDiv.style.display = "block";
+
+      initLeafletMap();      
+      populateLeafletMap();  
+
+
+      // Centrer la carte
+      const bounds = markersLayer.getBounds();
+      if (bounds.isValid()) {
+        leafletMap.fitBounds(bounds, { padding: [20, 20] });
+      }
+
+      // Centrer le réseau
+      if (network && typeof network.fit === "function") {
+        network.fit({
+          animation: {
+            duration: 500,
+            easingFunction: "easeInOutQuad"
+          }
+        });
+      }
+
+      // Change le texte du bouton de carte
+      document.getElementById("toggle-map").textContent = "🔁 Retour au réseau";
+    });
+
+    function blinkLeafletLayer(layer, duration = 5000, interval = 500) {
+      if (!layer) return;
+
+      const isCircleMarker = layer instanceof L.CircleMarker;
+      const isPolygon = layer instanceof L.Polygon || layer instanceof L.GeoJSON || layer.getBounds;
+
+      let visible = true;
+      let elapsed = 0;
+
+      const originalStyle = layer.options || {};
+
+      const blinkInterval = setInterval(() => {
+        visible = !visible;
+        elapsed += interval;
+
+        if (isCircleMarker && layer.setStyle) {
+          layer.setStyle({
+            opacity: visible ? 1 : 0,
+            fillOpacity: visible ? 0.8 : 0
+          });
+        } else if (isPolygon && layer.setStyle) {
+          layer.setStyle({
+            opacity: visible ? 1 : 0,
+            fillOpacity: visible ? 0.2 : 0
+          });
+        } else {
+          clearInterval(blinkInterval);
+          return;
+        }
+
+        if (elapsed >= duration) {
+          clearInterval(blinkInterval);
+          layer.setStyle(originalStyle);
+        }
+      }, interval);
+    }
+
+    function blinkLeafletLine(edgeId, duration = 5000, interval = 500) {
+      const edge = network.body.edges[edgeId];
+      if (!edge || !edge.options) return;
+
+      const visEdge = network.body.edges[edgeId];
+      const originalOptions = {
+        color: visEdge.options.color,
+        font: visEdge.options.font
+      };
+
+      let visible = true;
+      let elapsed = 0;
+
+      const blinkInterval = setInterval(() => {
+        visible = !visible;
+        elapsed += interval;
+
+        visEdge.setOptions({
+          color: {
+            color: originalOptions.color.color,
+            opacity: visible ? 1 : 0
+          },
+          font: {
+            color: visible ? "#000" : "rgba(0,0,0,0)"
+          }
+        });
+
+        if (elapsed >= duration) {
+          clearInterval(blinkInterval);
+          visEdge.setOptions(originalOptions);
+        }
+      }, interval);
+
+  
+      const edgeData = network.body.data.edges.get(edgeId) || network.body.data.edges.get(edgeId.replace("zone-", "").replace("edge-", ""));
+      const from = edgeData.from;
+      const to = edgeData.to;
+      const lineKey = `edge-${from}-${to}`;
+      const line = leafletLines.get(lineKey) || leafletLines.get(`zone-${from}-${to}`);
+
+      if (line) {
+        const originalStyle = { ...line.options };
+        let mapVisible = true;
+        let mapElapsed = 0;
+
+        const mapBlinkInterval = setInterval(() => {
+          mapVisible = !mapVisible;
+          mapElapsed += interval;
+          line.setStyle({ opacity: mapVisible ? originalStyle.opacity : 0 });
+
+          if (mapElapsed >= duration) {
+            clearInterval(mapBlinkInterval);
+            line.setStyle(originalStyle);
+          }
+        }, interval);
+      }
+    }
+    
+    function blinkNetworkNode(nodeId, duration = 5000, interval = 500) {
+      const node = network.body.nodes[nodeId];
+      if (!node) {
+        console.warn("Nœud introuvable dans vis.js pour l'ID :", nodeId);
+        return;
+      }
+
+      let visible = true;
+      let elapsed = 0;
+
+      const blinkInterval = setInterval(() => {
+        visible = !visible;
+        elapsed += interval;
+
+        network.body.data.nodes.update({
+          id: nodeId,
+          opacity: visible ? 1 : 0
+        });
+
+        if (elapsed >= duration) {
+          clearInterval(blinkInterval);
+          network.body.data.nodes.update({
+            id: nodeId,
+            opacity: 1
+          });
+        }
+      }, interval);
+    }
+
+    function blinkOnlyNetworkEdge(edgeId, duration = 4000, interval = 400) {
+      const edge = data.edges.get(edgeId);
+      if (!edge) {
+        console.warn("Arête non trouvée dans vis.DataSet pour ID :", edgeId);
+        return;
+      }
+
+      // Ajouté : forcer la création dans `network.body.edges` si non présent
+      if (!network.body.edges[edgeId]) {
+        network.selectEdges([edgeId]); 
+        network.unselectAll(); 
+      }
+
+      let visible = true;
+      let elapsed = 0;
+
+      const originalEdge = data.edges.get(edgeId);
+      const blinkInterval = setInterval(() => {
+        visible = !visible;
+        elapsed += interval;
+
+        data.edges.update({
+          id: edgeId,
+          color: {
+            color: originalEdge.color?.color || "#999",
+            opacity: visible ? 1 : 0
+          },
+          font: {
+            color: visible ? "#000" : "rgba(0,0,0,0)"
+          }
+        });
+
+        if (elapsed >= duration) {
+          clearInterval(blinkInterval);
+          data.edges.update({
+            id: edgeId,
+            color: {
+              color: originalEdge.color?.color || "#999",
+              opacity: 1
+            },
+            font: {
+              color: "#000"
+            }
+          });
+        }
+      }, interval);
+    }
+
 
 
 
