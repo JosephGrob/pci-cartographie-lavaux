@@ -137,27 +137,65 @@
 <body>
 
   
-<header style="text-align: center; margin-bottom: 20px;">
+<header style="text-align: center; margin-bottom: 50px;">
   <h1 style="font-size: 2.4em; color: #2c3e50; margin-bottom: 10px;">
     Réseau d'acteurs lié au savoir-faire traditionnel (entretien et construction) des murs de vigne à Lavaux
   </h1>
 
-  <div style="margin-bottom: 15px;">
-    <button id="toggle-actor-list" style="background-color: #3498db; color: white; border: none; padding: 10px 16px; border-radius: 6px; font-size: 15px; cursor: pointer; margin: 4px;">
-      📂 Répertoire des acteurs
-    </button>
+  <div style="margin-bottom: 20px; text-align: center; margin-top: 30px;">
+    <div style="display: inline-flex; gap: 12px; flex-wrap: wrap;">
+      <button id="toggle-actor-list" style="background-color: #3498db; color: white; border: none; padding: 10px 16px; border-radius: 6px; font-size: 15px; cursor: pointer;">
+        📂 Répertoire des acteurs
+      </button>
 
-    <button id="reset-view" style="background-color: #5d6d7e; color: white; border: none; padding: 10px 16px; border-radius: 6px; font-size: 15px; cursor: pointer; margin: 4px;">
-      🔄 Réinitialiser la vue
-    </button>
+      <button id="reset-view" style="background-color: #5d6d7e; color: white; border: none; padding: 10px 16px; border-radius: 6px; font-size: 15px; cursor: pointer;">
+        🔄 Réinitialiser la vue
+      </button>
 
-    <button id="toggle-map" style="background-color: #27ae60; color: white; border: none; padding: 10px 16px; border-radius: 6px; font-size: 15px; cursor: pointer; margin: 4px;">
-      🗺️ Afficher la carte
-    </button>
-    <button id="toggle-network-map" style="background-color: #8e44ad; color: white; border: none; padding: 10px 16px; border-radius: 6px; font-size: 15px; cursor: pointer; margin: 4px;">
-    Réseau + carte
-    </button>
+      <button id="toggle-map" style="background-color: #27ae60; color: white; border: none; padding: 10px 16px; border-radius: 6px; font-size: 15px; cursor: pointer;">
+        🗺️ Afficher la carte
+      </button>
+
+      <button id="toggle-network-map" style="background-color: #8e44ad; color: white; border: none; padding: 10px 16px; border-radius: 6px; font-size: 15px; cursor: pointer;">
+        🧭 Réseau + carte
+      </button>
+    </div>
+
+
+   <div id="legend-container" style="position: absolute; top: 10%; right: 30px; background: #fff; padding: 10px 15px; border: 1px solid #ccc; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); font-size: 14px;">
+      <strong>Légende</strong><br>
+      <div style="margin-top: 6px; line-height: 1.8;">
+        <div><span style="display:inline-block;width:12px;height:12px;background:#3498db;border-radius:50%;margin-right:6px;"></span>Acteur·rice / Entité</div>
+        <div><span style="display:inline-block;width:12px;height:12px;background:#e67e22;border-radius:50%;margin-right:6px;"></span>Lieu associé au PCI</div>
+        
+        <div>
+          <svg width="40" height="10" style="vertical-align: middle; margin-right: 6px;">
+            <defs>
+              <marker id="arrowhead-grey" markerWidth="6" markerHeight="4" refX="6" refY="2" orient="auto" markerUnits="userSpaceOnUse">
+                <polygon points="0 0, 6 2, 0 4" fill="#2c3e50" />
+              </marker>
+            </defs>
+            <line x1="0" y1="2" x2="30" y2="2" stroke="#2c3e50" stroke-width="2" marker-end="url(#arrowhead-grey)" />
+          </svg>
+          Liens sociaux (relations entre individus/entités)
+        </div>
+
+        <div>
+          <svg width="40" height="10" style="vertical-align: middle; margin-right: 6px;">
+            <defs>
+              <marker id="arrowhead-orange" markerWidth="6" markerHeight="4" refX="6" refY="2" orient="auto" markerUnits="userSpaceOnUse">
+                <polygon points="0 0, 6 2, 0 4" fill="#e67e22" />
+              </marker>
+            </defs>
+            <line x1="0" y1="2" x2="30" y2="2" stroke="#e67e22" stroke-width="2" stroke-dasharray="4,2" marker-end="url(#arrowhead-orange)" />
+          </svg>
+          Lien au territoire (relations au territoire)
+        </div>
+      </div>
+    </div>
+
   </div>
+
 
   <p style="font-style: italic; color: #555;">
     Ce graphe est généré automatiquement à partir des réponses enregistrées dans Baserow.
@@ -321,7 +359,9 @@
             user_lieu: row.user_lieu,
             memoire: row.memoire,
             evenement: row.evenement,
-            fichier_media: row.fichier_media
+            fichier_media: row.fichier_media,
+            memoire_zones: row.memoire_zones,
+            memoire_points: row.memoire_points
           }, true); 
 
         }
@@ -342,6 +382,27 @@
         } catch (e) {
           console.warn("Impossible de parser collaborations_dynamiques :", e);
         }
+
+
+        // On stocke la liste des collaborations dynamiques dans les métadonnées du nœud auteur
+        if (resolvedAuthorId && dynCollabs.length > 0) {
+          const authorNode = nodesMap.get(resolvedAuthorId);
+          if (authorNode) {
+            // On initialise le champ s’il n’existe pas
+            if (!authorNode.meta.collaborations_dynamiques) {
+              authorNode.meta.collaborations_dynamiques = [];
+            }
+
+            // Ajoute les éléments dynamiques s’ils ne sont pas déjà présents
+            dynCollabs.forEach(entry => {
+              const exists = authorNode.meta.collaborations_dynamiques.some(e => e.nom === entry.nom && e.description === entry.description);
+              if (!exists) {
+                authorNode.meta.collaborations_dynamiques.push(entry);
+              }
+            });
+          }
+        }
+
 
         if (Array.isArray(dynCollabs)) {
           dynCollabs.forEach(c => {
@@ -482,7 +543,9 @@
                 to: zoneId,
                 label: edgeLabel,
                 dashes: true,
-                color: { color: "#e67e22" }
+                color: { color: "#e67e22" },
+                memoire_zones: row.memoire_zones,     // tableau brut
+                memoire_points: row.memoire_points // chaîne JSON ou tableau
               });
 
             });
@@ -552,7 +615,17 @@
 
           const [label, description] = keyLabels[key] || [key, ""];
           let valueHtml = "";
-          if (key === "fichier_media") {
+          if (key === "memoire_points") {
+            try {
+              const anecdotes = list.map(entry => {
+                if (typeof entry === "string") entry = JSON.parse(entry);
+                return entry.texte;
+              }).filter(Boolean);
+              valueHtml = anecdotes.map(txt => `<div style="margin-bottom: 6px;">📌 ${txt}</div>`).join("");
+            } catch (e) {
+              valueHtml = "<em>Format non lisible</em>";
+            }
+          } else if (key === "fichier_media") {
             valueHtml = list.map(entry => {
               const url = entry.url;
               if (!url) return "";
@@ -719,11 +792,60 @@
 
       network = new vis.Network(container, data, options);
 
+      // Ajout dynamique des boutons de zoom dans le conteneur réseau
+      const zoomControls = document.createElement("div");
+      zoomControls.id = "network-zoom-controls";
+      zoomControls.style.cssText = `
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        z-index: 10;
+        background: white;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+        overflow: hidden;
+      `;
+
+      zoomControls.innerHTML = `
+        <button onclick="zoomNetwork(1.2)" style="
+          display: block;
+          width: 30px;
+          height: 30px;
+          border: none;
+          background: white;
+          font-size: 18px;
+          line-height: 1;
+          cursor: pointer;
+          border-bottom: 1px solid #ccc;
+        ">+</button>
+        <button onclick="zoomNetwork(0.8)" style="
+          display: block;
+          width: 30px;
+          height: 30px;
+          border: none;
+          background: white;
+          font-size: 18px;
+          line-height: 1;
+          cursor: pointer;
+        ">−</button>
+      `;
+
+      container.style.position = "relative"; // assure que le bouton s'aligne correctement
+      container.appendChild(zoomControls);
+
+
 
 
 
       network.on("click", function (params) {
         const panel = document.getElementById("info-panel");
+        if (ignoreNetworkBlink) {
+          console.log("Clignotement réseau bloqué (clic venant du réseau)");
+          ignoreNetworkBlink = false;
+          return;
+        }
+
 
         panel.style.display = "block";
 
@@ -791,71 +913,161 @@
 
           } else if (params.edges.length > 0) {
             const edgeId = params.edges[0];
-            blinkLeafletLine(edgeId);
+
+            if (lockedEdges.has(edgeId)) {
+              console.log("⛔ Arête verrouillée pendant clignotement : AFFICHAGE quand même autorisé", edgeId);
+              // ⚠️ NE PAS return → on affiche quand même les infos
+            }
+
+            console.log("🖱️ Click sur arête dans vis.js :", edgeId);
+
+            // On ne clignote QUE dans Leaflet
+            lockedEdges.add(edgeId);
+            console.log("🔒 Edge locked (juste carte) :", edgeId);
+            blinkOnlyLeafletLine(edgeId);
+
             const edgeData = data.edges.get(edgeId);
-
-
-            // Clignotement
-            blinkLeafletLine(edgeId);
-
-            // Zoom sur la ligne sur la carte
             const fromNode = nodesMap.get(edgeData.from);
             const toNode = nodesMap.get(edgeData.to);
 
+            const zoneNode = [fromNode, toNode].find(n => n.group === "zone");
+            const zoneMetaId = zoneNode?.geojson?.properties?.id_meta;
+
+            if (zoneMetaId) {
+              let memoireZones = [];
+              let memoirePoints = [];
+
+              // 🔄 Parsing sécurisé des souvenirs liés aux zones
+              try {
+                const rawZones = edgeData.memoire_zones;
+                memoireZones = Array.isArray(rawZones) ? rawZones : JSON.parse(rawZones);
+              } catch (e) {
+                console.warn("❌ Erreur de parsing pour memoire_zones :", e);
+              }
+
+              // 🔄 Parsing sécurisé des souvenirs liés aux points
+              try {
+                const rawPoints = edgeData.memoire_points;
+                memoirePoints = Array.isArray(rawPoints) ? rawPoints : JSON.parse(rawPoints);
+              } catch (e) {
+                console.warn("❌ Erreur de parsing pour memoire_points :", e);
+              }
+
+              // 🎯 Filtrer les souvenirs correspondant à la zone cliquée
+              const zonesMatch = memoireZones.filter(m => m.id_meta === zoneMetaId && m.texte?.trim());
+              const pointsMatch = memoirePoints.filter(m => m.id_meta === zoneMetaId && m.texte?.trim());
+
+              // 🖨️ Affichage console
+              console.log(`🧠 Souvenirs ZONES pour ${zoneMetaId} :`, zonesMatch.map(z => z.texte));
+              console.log(`📍 Souvenirs POINTS pour ${zoneMetaId} :`, pointsMatch.map(p => p.texte));
+            }
+
+
+
+            if (zoneNode && zoneNode.geojson) {
+              console.log("🗺️ GeoJSON complet de la zone :", zoneNode.geojson);
+            }
+
+
+            const fromMeta = fromNode?.meta || {};
+            const toMeta = toNode?.meta || {};
+
+            const fromLabel = fromNode?.label || edgeData.from;
+            const toLabel = toNode?.label || edgeData.to;
+
+            const isZoneLink = fromLabel === "Lieu" || toLabel === "Lieu" || toLabel.includes("zone");
+
+            // 📍 Zoom carte
             const fromCoords = fromNode?._mapCoords || fromNode?._center;
             const toCoords = toNode?._mapCoords || toNode?._center;
-
             if (leafletMap && fromCoords && toCoords) {
               const bounds = L.latLngBounds([fromCoords, toCoords]);
               leafletMap.fitBounds(bounds, { padding: [40, 40] });
             }
 
-
-
-            const fromLabel = nodesMap.get(edgeData.from)?.label || edgeData.from;
-            const toLabel = nodesMap.get(edgeData.to)?.label || edgeData.to;
-
-            const isZoneLink = (fromLabel === "Lieu" || toLabel === "Lieu") || toLabel.includes("zone");
-
-
-            // Zoom sur la zone si lien vers une zone
-            if (leafletMap && fromLabel === "Lieu" || toLabel === "Lieu") {
-              const targetNode = nodesMap.get(edgeData.to);
-              if (targetNode && targetNode._mapCoords) {
-                leafletMap.setView(targetNode._mapCoords, 15, { animate: true });
-              } else if (targetNode && targetNode._bounds) {
-                leafletMap.fitBounds(targetNode._bounds, { padding: [20, 20] });
-              }
-            }
-
-
             if (isZoneLink) {
               const relation = edgeData.label || "lien au territoire";
 
-              // Déterminer un texte adapté selon le type de relation
-              let contextSentence = "Souvenir ou perception liée à ce lieu :";
+              let contextSentence = "Souvenir(s), perception(s), anecdote(s) lié(s) à ce lieu :";
+              if (relation.includes("appris")) contextSentence = "… lié(s) à l’apprentissage du savoir-faire :";
+              else if (relation.includes("transmis")) contextSentence = "… lié(s) à la transmission du savoir-faire :";
+              else if (relation.includes("pratiqué")) contextSentence = "… dans le cadre de la pratique du savoir-faire :";
+              else if (relation.includes("étudié")) contextSentence = "… dans le cadre de l’étude ou de la recherche :";
+              else if (relation.includes("information")) contextSentence = "Information(s) que l’acteur souhaite partager à propos de ce lieu :";
 
-              if (relation.includes("appris")) {
-                contextSentence = "Souvenir(s), perception(s), anecdote(s), information(s) lié(s) à ce lieu en lien avec l’apprentissage ou la transmission du savoir-faire:";
-              } else if (relation.includes("transmis")) {
-                contextSentence = "Souvenir(s), perception(s), anecdote(s), information(s) lié(s) à ce lieu en lien avec la transmission ou l’enseignement du savoir-faire :";
-              } else if (relation.includes("pratiqué")) {
-                contextSentence = "Souvenir(s), perception(s), anecdote(s), information(s) lié(s) à ce lieu dans le cadre de la pratique du savoir-faire :";
-              } else if (relation.includes("étudié")) {
-                contextSentence = "Souvenir(s), perception(s), anecdote(s), information(s) lié(s) à ce lieu dans le cadre de l’étude ou de la recherche :";
-              } else if (relation.includes("informations")) {
-                contextSentence = "Information(s) que l’acteur souhaite partager à propos de ce lieu en lien avec le savoir-faire :";
+              const zoneNode = [fromNode, toNode].find(n => n.group === "zone");
+              const zoneMetaId = zoneNode?.geojson?.properties?.id_meta;
+
+              let memoireZones = [], memoirePoints = [];
+              try {
+                const rawZones = edgeData.memoire_zones;
+                memoireZones = Array.isArray(rawZones) ? rawZones : JSON.parse(rawZones);
+              } catch (e) {
+                console.warn("❌ Erreur de parsing memoire_zones :", e);
               }
 
+              try {
+                const rawPoints = edgeData.memoire_points;
+                memoirePoints = Array.isArray(rawPoints) ? rawPoints : JSON.parse(rawPoints);
+              } catch (e) {
+                console.warn("❌ Erreur de parsing memoire_points :", e);
+              }
+
+              const zonesMatch = memoireZones.filter(m => m.id_meta === zoneMetaId && m.texte?.trim());
+              const pointsMatch = memoirePoints.filter(m => m.id_meta === zoneMetaId && m.texte?.trim());
+
+              let memoireHtml = "";
+
+              if (zonesMatch.length > 0 || pointsMatch.length > 0) {
+                memoireHtml += `<div style="margin-top: 10px;"><strong>${contextSentence}</strong><br>`;
+                zonesMatch.forEach(z => {
+                  memoireHtml += `<div style="margin-bottom: 6px;"> ${z.texte.trim()}</div>`;
+                });
+                pointsMatch.forEach(p => {
+                  memoireHtml += `<div style="margin-bottom: 6px;">📍 ${p.texte.trim()}</div>`;
+                });
+                memoireHtml += `</div>`;
+              } else {
+                memoireHtml += `<em>Aucune anecdote ou souvenir renseigné pour ce lieu.</em>`;
+              }
+
+              // 🖼️ Affichage final
               document.getElementById("info-content").innerHTML = `
                 <h3>Lien au territoire ou à l’espace</h3>
                 <p><strong>Acteur :</strong> ${fromLabel}</p>
                 <p><strong>Type de relation au lieu :</strong> ${relation.charAt(0).toUpperCase() + relation.slice(1)} le savoir-faire</p>
-                <p><strong>${contextSentence}</strong></p>
-                <p>${edgeData.title?.trim() || "<em>Aucun élément n’a été renseigné pour ce lieu.</em>"}</p>
+                ${memoireHtml}
+              `;
+
+            } else {
+              // 🔍 Collaboration
+              const actor = fromMeta.nom?.[0]?.value || fromLabel;
+              const collab = toMeta.collab_nom?.[0]?.value || toLabel;
+
+              const implication = toMeta.collab_implication?.[0]?.value || "";
+              let anecdote = "";
+
+              let dyn = fromMeta.collaborations_dynamiques || [];
+              try {
+                if (typeof dyn === "string") dyn = JSON.parse(dyn);
+                if (Array.isArray(dyn)) {
+                  const match = dyn.find(d => d.nom === collab);
+                  if (match?.description) anecdote = match.description;
+                }
+              } catch (e) {
+                console.warn("⚠️ Erreur parsing collaborations_dynamiques", e);
+              }
+
+              document.getElementById("info-content").innerHTML = `
+                <h3>Collaboration entre acteurs</h3>
+                <p><strong>Acteur principal :</strong> ${actor}</p>
+                <p><strong>Collaborateur :</strong> ${collab}</p>
+                ${implication ? `<p><strong>Implication :</strong> ${implication}</p>` : ""}
+                ${anecdote ? `<p><strong>Anecdote :</strong><br>${anecdote}</p>` : "<p><em>Aucune anecdote renseignée.</em></p>"}
               `;
             }
           }
+
 
 
 
@@ -922,6 +1134,10 @@
           const isDirect = edge.from === selectedId || edge.to === selectedId;
           const edgeInVis = network.body.edges[id];
           if (edgeInVis) {
+            if (lockedEdges.has(id)) {
+              console.log("⛔ Arête verrouillée pendant clignotement : mise à jour visuelle ignorée", id);
+              return;
+            }
             edgeInVis.setOptions({
               color: {
                 color: edge.color?.color || "#999",
@@ -933,6 +1149,7 @@
             });
           }
         });
+
 
         // Carte
         console.log("Mise à jour des marqueurs...");
@@ -987,7 +1204,11 @@
         Object.values(network.body.nodes).forEach(node => {
           node.setOptions({ opacity: 1 });
         });
-        Object.values(network.body.edges).forEach(edge => {
+        Object.entries(network.body.edges).forEach(([id, edge]) => {
+          if (lockedEdges.has(id)) {
+            console.log("⛔ Arête verrouillée pendant clignotement : reset ignoré", id);
+            return;
+          }
           edge.setOptions({
             color: {
               color: edge.options.color?.color || "#999",
@@ -998,6 +1219,7 @@
             }
           });
         });
+
 
         // Recentrer automatiquement le graphe si tu veux :
         network.fit({
@@ -1075,6 +1297,14 @@
     let markersLayer;
     let leafletMarkers = new Map();
     let leafletLines = new Map();
+    let ignoreNetworkBlink = false;
+    let blinkingEdges = new Set();
+    let blinkingLeafletLines = new Set();
+    let lockedEdges = new Set();  // ← Arêtes temporairement "verrouillées"
+
+
+
+
 
 
     function initLeafletMap() {
@@ -1124,6 +1354,8 @@
         marker.on('click', () => {
           const panel = document.getElementById("info-panel");
           panel.style.display = "block";
+
+          ignoreNetworkBlink = true;
 
           blinkNetworkNode(node.id);
 
@@ -1182,6 +1414,8 @@
           marker.on('click', () => {
             document.getElementById("info-panel").style.display = "block";
 
+            ignoreNetworkBlink = true;
+
             blinkNetworkNode(node.id);
             document.getElementById("info-content").innerHTML = `
               <h3>Zone d’étude</h3>
@@ -1236,6 +1470,7 @@
               }).addTo(map);
               map.fitBounds(L.geoJSON(geojson).getBounds());
             }, 50);
+            ignoreNetworkBlink = true;
             blinkNetworkNode(node.id);
           });
 
@@ -1282,6 +1517,7 @@
           });
 
           if (matchingEdgeId) {
+            ignoreNetworkBlink = true;
             blinkOnlyNetworkEdge(matchingEdgeId);
           } else {
             console.warn("Aucune arête réseau trouvée pour", edge.from, "→", edge.to);
@@ -1416,8 +1652,21 @@
     }
 
     function blinkLeafletLine(edgeId, duration = 5000, interval = 500) {
+      console.log("📣 blinkLeafletLine appelée avec edgeId =", edgeId);
+
       const edge = network.body.edges[edgeId];
-      if (!edge || !edge.options) return;
+      if (!edge || !edge.options) {
+        console.warn("❌ edge introuvable dans network.body.edges pour ID :", edgeId);
+        return;
+      }
+
+      if (lockedEdges.has(edgeId)) {
+        console.log("⛔ edge déjà verrouillée :", edgeId);
+        return;
+      }
+
+      lockedEdges.add(edgeId);
+      console.log("🔒 Edge verrouillée :", edgeId);
 
       const visEdge = network.body.edges[edgeId];
       const originalOptions = {
@@ -1445,33 +1694,136 @@
         if (elapsed >= duration) {
           clearInterval(blinkInterval);
           visEdge.setOptions(originalOptions);
+          lockedEdges.delete(edgeId);
+          console.log("🔓 Clignotement terminé, edge déverrouillée :", edgeId);
         }
       }, interval);
 
-  
-      const edgeData = network.body.data.edges.get(edgeId) || network.body.data.edges.get(edgeId.replace("zone-", "").replace("edge-", ""));
+      // 🔍 Vérification des coordonnées pour la carte (Leaflet)
+      const edgeData = network.body.data.edges.get(edgeId);
+      if (!edgeData) {
+        console.warn("❌ Aucune donnée pour cette edge dans data.edges :", edgeId);
+        return;
+      }
+
+      const from = edgeData.from;
+      const to = edgeData.to;
+      console.log("🔗 edge connecte :", from, "→", to);
+
+      const directKey = `edge-${from}-${to}`;
+      const reverseKey = `edge-${to}-${from}`;
+      const zoneDirectKey = `zone-${from}-${to}`;
+      const zoneReverseKey = `zone-${to}-${from}`;
+
+      const possibleKeys = [directKey, reverseKey, zoneDirectKey, zoneReverseKey];
+      console.log("🗝️ Tentatives de récupération des lignes Leaflet avec clés :", possibleKeys);
+
+      let line = null;
+      for (const key of possibleKeys) {
+        if (leafletLines.has(key)) {
+          line = leafletLines.get(key);
+          console.log("✅ Ligne trouvée pour la clé :", key);
+          break;
+        }
+      }
+
+      if (!line) {
+        console.warn("❌ Aucune ligne Leaflet trouvée pour edgeId :", edgeId);
+        return;
+      }
+
+      const blinkKey = directKey; // Juste pour éviter doublons
+      if (blinkingLeafletLines.has(blinkKey)) {
+        console.log("⛔ Ligne déjà en clignotement (Leaflet) :", blinkKey);
+        return;
+      }
+      blinkingLeafletLines.add(blinkKey);
+
+      const originalStyle = { ...line.options };
+      let mapVisible = true;
+      let mapElapsed = 0;
+
+      const mapBlinkInterval = setInterval(() => {
+        mapVisible = !mapVisible;
+        mapElapsed += interval;
+        line.setStyle({ opacity: mapVisible ? originalStyle.opacity : 0 });
+
+        if (mapElapsed >= duration) {
+          clearInterval(mapBlinkInterval);
+          blinkingLeafletLines.delete(blinkKey);
+          line.setStyle(originalStyle);
+          console.log("✅ Clignotement Leaflet terminé pour :", blinkKey);
+        }
+      }, interval);
+    }
+
+
+    function blinkOnlyLeafletLine(edgeId, duration = 5000, interval = 500) {
+      console.log("📣 blinkOnlyLeafletLine appelée pour", edgeId);
+
+      const edgeData = data.edges.get(edgeId);
+      if (!edgeData) {
+        console.warn("❌ Aucune arête vis.js trouvée pour edgeId =", edgeId);
+        return;
+      }
+
       const from = edgeData.from;
       const to = edgeData.to;
       const lineKey = `edge-${from}-${to}`;
       const line = leafletLines.get(lineKey) || leafletLines.get(`zone-${from}-${to}`);
 
-      if (line) {
-        const originalStyle = { ...line.options };
-        let mapVisible = true;
-        let mapElapsed = 0;
-
-        const mapBlinkInterval = setInterval(() => {
-          mapVisible = !mapVisible;
-          mapElapsed += interval;
-          line.setStyle({ opacity: mapVisible ? originalStyle.opacity : 0 });
-
-          if (mapElapsed >= duration) {
-            clearInterval(mapBlinkInterval);
-            line.setStyle(originalStyle);
-          }
-        }, interval);
+      if (!line) {
+        console.warn("❌ Aucune ligne Leaflet trouvée pour", lineKey);
+        return;
       }
+
+      if (blinkingLeafletLines.has(lineKey)) {
+        console.log("⛔ Ligne Leaflet déjà en clignotement :", lineKey);
+        return;
+      }
+
+      blinkingLeafletLines.add(lineKey);
+      const originalStyle = { ...line.options };
+      let visible = true;
+      let elapsed = 0;
+
+      const mapBlinkInterval = setInterval(() => {
+        visible = !visible;
+        elapsed += interval;
+        line.setStyle({ opacity: visible ? originalStyle.opacity : 0 });
+
+        if (elapsed >= duration) {
+          clearInterval(mapBlinkInterval);
+          blinkingLeafletLines.delete(lineKey);
+          line.setStyle(originalStyle);
+          console.log("✅ Fin du clignotement Leaflet :", lineKey);
+        }
+      }, interval);
     }
+
+
+
+    function blinkLeafletLineOnly(lineKey, line, duration = 5000, interval = 500) {
+      if (blinkingLeafletLines.has(lineKey)) return;
+
+      blinkingLeafletLines.add(lineKey);
+      const originalStyle = { ...line.options };
+      let mapVisible = true;
+      let elapsed = 0;
+
+      const mapBlinkInterval = setInterval(() => {
+        mapVisible = !mapVisible;
+        elapsed += interval;
+        line.setStyle({ opacity: mapVisible ? originalStyle.opacity : 0 });
+
+        if (elapsed >= duration) {
+          clearInterval(mapBlinkInterval);
+          blinkingLeafletLines.delete(lineKey);
+          line.setStyle(originalStyle);
+        }
+      }, interval);
+    }
+
     
     function blinkNetworkNode(nodeId, duration = 5000, interval = 500) {
       const node = network.body.nodes[nodeId];
@@ -1505,20 +1857,31 @@
     function blinkOnlyNetworkEdge(edgeId, duration = 4000, interval = 400) {
       const edge = data.edges.get(edgeId);
       if (!edge) {
-        console.warn("Arête non trouvée dans vis.DataSet pour ID :", edgeId);
+        console.warn("❌ Arête non trouvée :", edgeId);
         return;
       }
 
-      // Ajouté : forcer la création dans `network.body.edges` si non présent
-      if (!network.body.edges[edgeId]) {
-        network.selectEdges([edgeId]); 
-        network.unselectAll(); 
+      // Si déjà en clignotement → on ne relance que le clignotement carte
+      if (lockedEdges.has(edgeId)) {
+        console.log("⛔ Arête déjà verrouillée : on relance uniquement la carte :", edgeId);
+
+        const from = edge.from;
+        const to = edge.to;
+        const lineKey = `edge-${from}-${to}`;
+        const line = leafletLines.get(lineKey) || leafletLines.get(`zone-${from}-${to}`);
+        if (line) blinkLeafletLineOnly(lineKey, line); // définie ailleurs
+        return;
       }
 
+      // 🔐 Lock
+      lockedEdges.add(edgeId);
+      blinkingEdges.add(edgeId);
+      console.log("🔒 Edge locked:", edgeId);
+
+      const originalEdge = { ...edge };
       let visible = true;
       let elapsed = 0;
 
-      const originalEdge = data.edges.get(edgeId);
       const blinkInterval = setInterval(() => {
         visible = !visible;
         elapsed += interval;
@@ -1536,20 +1899,42 @@
 
         if (elapsed >= duration) {
           clearInterval(blinkInterval);
-          data.edges.update({
-            id: edgeId,
-            color: {
-              color: originalEdge.color?.color || "#999",
-              opacity: 1
-            },
-            font: {
-              color: "#000"
-            }
-          });
+          blinkingEdges.delete(edgeId);
+          lockedEdges.delete(edgeId);
+          console.log("🔓 Edge unlocked:", edgeId);
+
+          // Remise à l'état précédent (si l'arête n’a pas été masquée entre-temps)
+          const current = data.edges.get(edgeId);
+          if (current) {
+            data.edges.update({
+              id: edgeId,
+              color: {
+                color: originalEdge.color?.color || "#999",
+                opacity: (current.color?.opacity === 0 || current.color?.opacity === 0.05) ? current.color.opacity : 1
+              },
+              font: {
+                color: "#000"
+              }
+            });
+          }
         }
       }, interval);
+
+      // Lancer aussi le clignotement sur la carte
+      const from = edge.from;
+      const to = edge.to;
+      const lineKey = `edge-${from}-${to}`;
+      const line = leafletLines.get(lineKey) || leafletLines.get(`zone-${from}-${to}`);
+      if (line) blinkLeafletLineOnly(lineKey, line);
     }
 
+
+    function zoomNetwork(factor) {
+      if (!network) return;
+      const scale = network.getScale() * factor;
+      const position = network.getViewPosition();
+      network.moveTo({ position, scale, animation: true });
+    }
 
 
 

@@ -253,6 +253,9 @@
   const geojsonZones = [];
   const pointLayers = {}; 
 
+  const memoireToIdMetaMap = {};
+
+
   const defaultIcon = L.icon({
     iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
     shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
@@ -276,6 +279,11 @@
       timeout = setTimeout(() => fn(...args), delay);
     };
   }
+
+  function generateIdMeta() {
+    return 'id_' + Math.random().toString(36).substr(2, 9);
+  }
+
 
 
   const roleLabels = {
@@ -877,6 +885,14 @@
 
       const geojson = e.layer.toGeoJSON();
 
+
+
+
+
+      const id_meta = generateIdMeta();
+      geojson.properties.id_meta = id_meta;
+
+
       if (geojson.geometry.type === "Point") {
         const zoneType = mapIdToZoneType[id] || "point";
         geojson.properties.zoneType = zoneType;
@@ -887,7 +903,10 @@
         const divMemoire = document.getElementById(`memoire-${id}`);
         if (divMemoire) {
           const pointIndex = geojsonZones.filter(z => z.geometry.type === "Point").length;
-          const textareaId = `memoire_point_${id}_${pointIndex}`;
+        const textareaId = `memoire_point_${id}_${pointIndex}`;
+
+          memoireToIdMetaMap[textareaId] = id_meta;
+
 
           const fieldset = document.createElement("fieldset");
           fieldset.className = "blue";
@@ -917,7 +936,12 @@
 
         zoneEtudeLayers[textareaId] = e.layer;
         e.layer._memoireTextareaId = textareaId;
+
+        memoireToIdMetaMap[textareaId] = id_meta;
       }
+
+  
+
 
       updateMemoireSection();
 
@@ -1593,20 +1617,26 @@
 
 
 
+
+
     const memoires_zones = [];
     const memoires_points = [];
+
 
     document.querySelectorAll("textarea[id^='memoire_']").forEach(textarea => {
       const id = textarea.id;
       const texte = textarea.value?.trim();
       if (!texte) return;
 
+      const id_meta = memoireToIdMetaMap[id] || null;
+
       if (id.includes("point")) {
-        memoires_points.push({ id, texte });
+        memoires_points.push({ id_meta, id, texte });
       } else {
-        memoires_zones.push({ id, texte });
+        memoires_zones.push({ id_meta, id, texte });
       }
     });
+
 
     data.memoire_zones = JSON.stringify(memoires_zones);
     data.memoire_points = JSON.stringify(memoires_points);
@@ -1864,11 +1894,18 @@
 
       geojsonZones.push(geojson);
 
+      const id_meta = generateIdMeta();
+      geojson.properties.id_meta = id_meta;
+
+
       const pointIndex = drawnItems.getLayers().filter(l => l instanceof L.Marker).length;
       const textareaId = `memoire_point_${mapId}_${pointIndex}`;
 
       // Enregistre le lien entre textarea et marqueur
       pointLayers[textareaId] = marker;
+
+      memoireToIdMetaMap[textareaId] = id_meta;
+
 
       const divMemoire = document.getElementById(`memoire-${mapId}`);
       if (divMemoire) {
