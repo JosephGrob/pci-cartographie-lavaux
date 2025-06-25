@@ -229,6 +229,12 @@
   <p style="font-style: italic; color: #555;">
     Ce graphe est généré automatiquement à partir des réponses enregistrées dans Baserow.
   </p>
+
+  <p style="font-style: italic; color: #444;">
+  Cliquez sur un nœud ou un lien dans le réseau ou sur la carte pour explorer les informations associées : 
+  détails sur une entité, anecdotes de collaboration ou souvenirs liés à un lieu.
+  </p>
+
   </header>
 
   <!-- Répertoire des acteurs (dépliable) -->
@@ -638,6 +644,7 @@
 
         for (const key of allKeys) {
           if (key === "type") continue;
+          if (["memoire_points", "memoire_zones"].includes(key)) continue; //
 
           const list = meta[key];
           if (!list || list.length === 0) continue;
@@ -733,7 +740,7 @@
           const button = li.querySelector(".actor-btn");
           button.addEventListener("click", () => {
             const selectedId = button.dataset.id;
-            console.log("🔍 Bouton cliqué :", selectedId);
+            console.log("Bouton cliqué :", selectedId);
 
             const allNodeIds = data.nodes.getIds();
             const allEdgeIds = data.edges.getIds();
@@ -945,7 +952,7 @@
 
             if (lockedEdges.has(edgeId)) {
               console.log("Arête verrouillée pendant clignotement : AFFICHAGE quand même autorisé", edgeId);
-              // ⚠️ NE PAS return → on affiche quand même les infos
+              // NE PAS return → on affiche quand même les infos
             }
 
             console.log("Click sur arête dans vis.js :", edgeId);
@@ -974,7 +981,7 @@
                 console.warn("Erreur de parsing pour memoire_zones :", e);
               }
 
-              // 🔄 Parsing sécurisé des souvenirs liés aux points
+              // Parsing sécurisé des souvenirs liés aux points
               try {
                 const rawPoints = edgeData.memoire_points;
                 memoirePoints = Array.isArray(rawPoints) ? rawPoints : JSON.parse(rawPoints);
@@ -982,11 +989,11 @@
                 console.warn("Erreur de parsing pour memoire_points :", e);
               }
 
-              // 🎯 Filtrer les souvenirs correspondant à la zone cliquée
+              // Filtrer les souvenirs correspondant à la zone cliquée
               const zonesMatch = memoireZones.filter(m => m.id_meta === zoneMetaId && m.texte?.trim());
               const pointsMatch = memoirePoints.filter(m => m.id_meta === zoneMetaId && m.texte?.trim());
 
-              // 🖨️ Affichage console
+              // Affichage console
               console.log(`Souvenirs ZONES pour ${zoneMetaId} :`, zonesMatch.map(z => z.texte));
               console.log(`Souvenirs POINTS pour ${zoneMetaId} :`, pointsMatch.map(p => p.texte));
             }
@@ -1060,7 +1067,7 @@
                 memoireHtml += `<em>Aucune anecdote ou souvenir renseigné pour ce lieu.</em>`;
               }
 
-              // 🖼️ Affichage final
+              // Affichage final
               document.getElementById("info-content").innerHTML = `
                 <h3>Lien au territoire ou à l’espace</h3>
                 <p><strong>Acteur :</strong> ${fromLabel}</p>
@@ -1084,7 +1091,7 @@
                   if (match?.description) anecdote = match.description;
                 }
               } catch (e) {
-                console.warn("⚠️ Erreur parsing collaborations_dynamiques", e);
+                console.warn("Erreur parsing collaborations_dynamiques", e);
               }
 
               document.getElementById("info-content").innerHTML = `
@@ -1351,6 +1358,8 @@
         attribution: "&copy; OpenStreetMap contributors"
       }).addTo(leafletMap);
 
+      leafletMap.on("zoomend", adjustLeafletElementsSize);
+
       markersLayer = L.featureGroup().addTo(leafletMap);
       leafletMarkers.clear();
       leafletLines.clear();
@@ -1539,19 +1548,121 @@
         line.on("click", () => {
           console.log("Ligne Leaflet cliquée :", key);
 
-          // Trouver l'arête dans le dataset vis.js
           const matchingEdgeId = data.edges.getIds().find(id => {
             const edgeData = data.edges.get(id);
             return edgeData.from === edge.from && edgeData.to === edge.to;
           });
 
-          if (matchingEdgeId) {
-            ignoreNetworkBlink = true;
-            blinkOnlyNetworkEdge(matchingEdgeId);
-          } else {
+          if (!matchingEdgeId) {
             console.warn("Aucune arête réseau trouvée pour", edge.from, "→", edge.to);
+            return;
+          }
+
+          ignoreNetworkBlink = true;
+          blinkOnlyNetworkEdge(matchingEdgeId);
+
+          const edgeData = data.edges.get(matchingEdgeId);
+          const fromNode = nodesMap.get(edgeData.from);
+          const toNode = nodesMap.get(edgeData.to);
+
+          const zoneNode = [fromNode, toNode].find(n => n.group === "zone");
+          const zoneMetaId = zoneNode?.geojson?.properties?.id_meta;
+
+          const panel = document.getElementById("info-panel");
+          panel.style.display = "block";
+
+          if (zoneNode && zoneNode.geojson) {
+            console.log("GeoJSON complet de la zone :", zoneNode.geojson);
+          }
+
+          const fromMeta = fromNode?.meta || {};
+          const toMeta = toNode?.meta || {};
+
+          const fromLabel = fromNode?.label || edgeData.from;
+          const toLabel = toNode?.label || edgeData.to;
+
+          const isZoneLink = fromLabel === "Lieu" || toLabel === "Lieu" || toLabel.includes("zone");
+
+          // Zoom carte
+          const fromCoords = fromNode?._mapCoords || fromNode?._center;
+          const toCoords = toNode?._mapCoords || toNode?._center;
+          if (leafletMap && fromCoords && toCoords) {
+            const bounds = L.latLngBounds([fromCoords, toCoords]);
+            leafletMap.fitBounds(bounds, { padding: [40, 40] });
+          }
+
+          if (isZoneLink) {
+            const relation = edgeData.label || "lien au territoire";
+
+            let contextSentence = "Souvenir(s), perception(s), anecdote(s) lié(s) à ce lieu :";
+            if (relation.includes("appris")) contextSentence = "… lié(s) à l’apprentissage du savoir-faire :";
+            else if (relation.includes("transmis")) contextSentence = "… lié(s) à la transmission du savoir-faire :";
+            else if (relation.includes("pratiqué")) contextSentence = "… dans le cadre de la pratique du savoir-faire :";
+            else if (relation.includes("étudié")) contextSentence = "… dans le cadre de l’étude ou de la recherche :";
+            else if (relation.includes("information")) contextSentence = "Information(s) que l’acteur souhaite partager à propos de ce lieu :";
+
+            let memoireZones = [], memoirePoints = [];
+            try {
+              const rawZones = edgeData.memoire_zones;
+              memoireZones = Array.isArray(rawZones) ? rawZones : JSON.parse(rawZones);
+            } catch (e) {}
+            try {
+              const rawPoints = edgeData.memoire_points;
+              memoirePoints = Array.isArray(rawPoints) ? rawPoints : JSON.parse(rawPoints);
+            } catch (e) {}
+
+            const zonesMatch = memoireZones.filter(m => m.id_meta === zoneMetaId && m.texte?.trim());
+            const pointsMatch = memoirePoints.filter(m => m.id_meta === zoneMetaId && m.texte?.trim());
+
+            let memoireHtml = "";
+
+            if (zonesMatch.length > 0 || pointsMatch.length > 0) {
+              memoireHtml += `<div style="margin-top: 10px;"><strong>${contextSentence}</strong><br>`;
+              zonesMatch.forEach(z => {
+                memoireHtml += `<div style="margin-bottom: 6px;"> ${z.texte.trim()}</div>`;
+              });
+              pointsMatch.forEach(p => {
+                memoireHtml += `<div style="margin-bottom: 6px;">📍 ${p.texte.trim()}</div>`;
+              });
+              memoireHtml += `</div>`;
+            } else {
+              memoireHtml += `<em>Aucune anecdote ou souvenir renseigné pour ce lieu.</em>`;
+            }
+
+            document.getElementById("info-content").innerHTML = `
+              <h3>Lien au territoire ou à l’espace</h3>
+              <p><strong>Acteur :</strong> ${fromLabel}</p>
+              <p><strong>Type de relation au lieu :</strong> ${relation.charAt(0).toUpperCase() + relation.slice(1)} le savoir-faire</p>
+              ${memoireHtml}
+            `;
+
+          } else {
+            const actor = fromMeta.nom?.[0]?.value || fromLabel;
+            const collab = toMeta.collab_nom?.[0]?.value || toLabel;
+            const implication = toMeta.collab_implication?.[0]?.value || "";
+            let anecdote = "";
+
+            let dyn = fromMeta.collaborations_dynamiques || [];
+            try {
+              if (typeof dyn === "string") dyn = JSON.parse(dyn);
+              if (Array.isArray(dyn)) {
+                const match = dyn.find(d => d.nom === collab);
+                if (match?.description) anecdote = match.description;
+              }
+            } catch (e) {}
+
+            document.getElementById("info-content").innerHTML = `
+              <h3>Collaboration entre acteurs</h3>
+              <p><strong>Acteur principal :</strong> ${actor}</p>
+              <p><strong>Collaborateur :</strong> ${collab}</p>
+              ${implication ? `<p><strong>Implication :</strong> ${implication}</p>` : ""}
+              ${anecdote ? `<p><strong>Anecdote :</strong><br>${anecdote}</p>` : "<p><em>Aucune anecdote renseignée.</em></p>"}
+            `;
           }
         });
+
+
+
 
 
 
@@ -1562,6 +1673,8 @@
       if (bounds.isValid()) {
         leafletMap.fitBounds(bounds, { padding: [20, 20] });
       }
+
+      adjustLeafletElementsSize();
     }
     
 
@@ -1728,7 +1841,7 @@
         }
       }, interval);
 
-      // 🔍 Vérification des coordonnées pour la carte (Leaflet)
+      // Vérification des coordonnées pour la carte (Leaflet)
       const edgeData = network.body.data.edges.get(edgeId);
       if (!edgeData) {
         console.warn("Aucune donnée pour cette edge dans data.edges :", edgeId);
@@ -1785,6 +1898,44 @@
         }
       }, interval);
     }
+
+
+    function adjustLeafletElementsSize() {
+      const zoom = leafletMap.getZoom();
+
+      // Tu peux ajuster ces limites selon ton goût
+      const baseRadius = 11;
+      const minRadius = 7;
+      const maxRadius = 18;
+
+      const scaleFactor = Math.pow(0.9, zoom - 12); // Zoom 12 = base
+      const adjustedRadius = Math.max(minRadius, Math.min(maxRadius, baseRadius / scaleFactor));
+
+      // Met à jour les marqueurs
+      leafletMarkers.forEach(marker => {
+        marker.setStyle({
+          radius: adjustedRadius,
+          weight: 1,
+          fillOpacity: 0.8,
+          opacity: 1
+        });
+      });
+
+      // Met à jour les lignes (liens)
+      leafletLines.forEach(line => {
+        const baseWeight = 3;
+        const minWeight = 1;
+        const maxWeight = 7;
+        const adjustedWeight = Math.max(minWeight, Math.min(maxWeight, baseWeight / scaleFactor));
+
+        line.setStyle({
+          weight: adjustedWeight,
+          opacity: 0.7
+        });
+      });
+    }
+
+
 
 
     function blinkOnlyLeafletLine(edgeId, duration = 5000, interval = 500) {
