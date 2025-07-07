@@ -227,7 +227,7 @@
 
 
   <p style="font-style: italic; color: #555;">
-    Ce graphe est généré automatiquement à partir des réponses enregistrées dans Baserow.
+    Ce graphe est généré automatiquement à partir des réponses enregistrées dans Baserow. Les données utilisées ici sont fictives.
   </p>
 
   <p style="font-style: italic; color: #444;">
@@ -1727,6 +1727,8 @@
     document.getElementById("toggle-network-map").addEventListener("click", () => {
       const mapDiv = document.getElementById("leaflet-map");
       const netDiv = document.getElementById("network");
+
+      lockedEdges.clear();
 
       // Affiche les deux
       mapDiv.style.display = "block";
