@@ -3,7 +3,7 @@
 **Auteur : Joseph Grob**  
 **Contact : joseph.grob@unil.ch**
 
-Ce dépôt contient les fichiers et ressources liés au mémoire de master consacré à l'exploration d’un dispositif numérique pour la sauvegarde du patrimoine culturel immatériel (PCI), appliqué au cas des murs de vigne de Lavaux.
+Ce dépôt contient les fichiers et ressources liés au mémoire de master consacré à l'exploration d’un dispositif numérique pour la sauvegarde du patrimoine culturel immatériel (PCI), appliqué au cas des murs de vigne à Lavaux.
 
 ## Objectif du dispositif
 
