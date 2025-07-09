@@ -14,6 +14,18 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
   <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
   <style>
+    /**
+    * Feuille de style CSS principale pour le formulaire participatif
+    *
+    * Ce code définit :
+    * - La mise en page générale du corps de la page (typographie, largeur, couleur de fond).
+    * - L’apparence des <fieldset> et <legend> pour structurer les sections du formulaire.
+    * - Le style des inputs, selects et textareas pour une interface cohérente et agréable.
+    * - La présentation des cartes interactives (Leaflet) avec hauteur fixe et bords arrondis.
+    * - Les résultats d’autocomplétion pour les lieux (boîte blanche, options survolables).
+    * - Des classes de couleur (.green, .blue, .purple, .orange, .brown) pour différencier visuellement les sections thématiques.
+    */
+
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       background-color: #f8f8f8;
@@ -87,6 +99,29 @@
   </style>
 </head>
 <body>
+
+<!--
+  ****************************************************
+  Partie HTML principale du formulaire participatif
+  ****************************************************
+
+  Contenu :
+  - Un titre général expliquant le projet (les murs de vigne à Lavaux)
+  - Une section "Contexte" détaillant l'origine patrimoniale et les enjeux du savoir-faire
+  - Un formulaire structuré par sections (fieldsets colorés) pour recueillir :
+    • L'identité de la personne ou entité qui répond
+    • Son lien avec le savoir-faire (pratique, étude, témoignage...)
+    • La possibilité de cartographier des zones ou lieux liés
+    • Des collaborations ou réseaux d'acteurs
+    • Une réflexion sur l'évolution du savoir-faire
+    • Un éventuel fichier visuel (photo, croquis...)
+  - Des champs dynamiques (nom, lieu, rôle, etc.) adaptés selon les choix
+  - Une zone finale pour envoyer le formulaire
+
+  Chaque section est mise en valeur par une couleur spécifique (green, purple, orange, brown, etc.)
+  Objectif : recueillir des informations riches et variées tout en guidant l’utilisateur étape par étape.
+-->
+
 
 <h1> Le savoir-faire traditionnel lié à la construction et l'entretien des murs de vignes à Lavaux</h1>
 
@@ -241,6 +276,38 @@
 </form>
 
 <script>
+
+  /*
+*********************************************************************
+Partie JavaScript — Initialisation et gestion des champs dynamiques
+*********************************************************************
+
+Contenu et rôle principal :
+
+- Déclaration d’objets et tableaux globaux pour :
+  • Gérer les cartes Leaflet et les polygones dessinés
+  • Enregistrer les états des zones d’étude (zones ou points) et leurs mémoires associées
+  • Gérer la mise en cache des recherches de lieux (autocomplete)
+
+- Définition d’icônes personnalisées pour les marqueurs (icône normal et rouge sur focus)
+
+- Définition de fonctions utilitaires :
+  • debounce() pour limiter la fréquence d'exécution (ex. pour l'autocomplete)
+  • generateIdMeta() pour générer un identifiant unique par zone ou point
+
+- Définition d’objets de labels dynamiques :
+  • roleLabels : texte adapté selon le type d’entité choisie (personne, famille, association, etc.)
+  • collabIntroLabels : texte explicatif pour la section "collaboration", adapté selon le type
+
+- Fonctions principales :
+  • updateKnowledgeOptions() : met à jour les options du champ "role" selon le type d’entité
+  • updateIdentityFields() : affiche dynamiquement les champs supplémentaires selon le type sélectionné (personne, famille, etc.) et configure l’autocomplete du lieu
+  • updateCollabFields() : adapte les champs et les labels pour la section collaboration, en fonction du type choisi
+
+Objectif global : 
+→ Dynamiser le formulaire en rendant les sections adaptatives, claires et engageantes pour l’utilisateur, tout en liant les zones cartographiques aux réponses.
+*/
+
   const drawnItemsMap = {}; 
   const lieuSearchCache = {};
 
@@ -814,6 +881,38 @@
   }
 
   
+/*
+*********************************************************************
+Partie JavaScript — Gestion dynamique des zones et cartes
+*********************************************************************
+
+Contenu et rôle principal :
+
+- Fonction updateZones() :
+  • Génère dynamiquement les sections de zones à remplir en fonction du rôle choisi (pratique, étude, transmission, etc.)
+  • Ajoute des fieldsets avec options (zone centrale, tampon, dessin personnalisé ou point précis)
+  • Prépare les cartes Leaflet pour chaque zone
+
+- Fonction toggleMap() :
+  • Affiche ou cache la carte et les options associées selon le choix "Oui" ou "Non" sur la question
+
+- Objet mapIdToZoneType :
+  • Associe chaque carte à un type de zone (apprentissage, transmission, etc.)
+
+- Fonction initMap() :
+  • Initialise une carte Leaflet, configure les contrôles de dessin
+  • Gère l’ajout de polygones ou points et les transforme en objets GeoJSON
+  • Lie chaque zone ou point à un champ "mémoire" (textarea) pour saisir un souvenir ou un récit
+  • Met à jour dynamiquement la section mémoire si un dessin est ajouté ou supprimé
+
+- Gestion des événements Leaflet (draw:created, draw:deleted) :
+  • Création d’un polygone ou d’un point → ajout de GeoJSON et d’un champ mémoire
+  • Suppression d’un polygone ou point → suppression du champ mémoire et nettoyage des données associées
+
+ Objectif global :
+→ Permettre à l’utilisateur de localiser visuellement les zones ou lieux importants liés à leur savoir-faire
+→ Relier chaque géométrie dessinée à une mémoire ou un récit individuel
+*/
 
 
 
@@ -998,6 +1097,41 @@
   }
 
 
+/*
+*********************************************************************
+Partie JavaScript — Gestion de la section "Mémoire" et recherche de lieu
+*********************************************************************
+
+Contenu et rôle principal :
+
+- Fonction updateMemoireSection()
+  • Génère dynamiquement les champs "souvenir" liés aux zones dessinées sur la carte
+  • Associe chaque polygone ou point créé à un champ textarea pour raconter un souvenir ou une anecdote
+  • Crée aussi un champ "mémoire global" adapté au type d'entité choisi (personne, famille, association, etc.)
+  • Met à jour les événements de focus/blur pour surligner la zone correspondante sur la carte
+
+- Fonction highlightZone()
+  • Change la couleur du polygone ou du point quand le textarea associé est actif
+  • Restaure la couleur par défaut quand le focus est perdu
+
+- Initialisation au chargement (DOMContentLoaded)
+  • Réinitialise tous les select (menus déroulants)
+  • Masque les cartes et sections inutiles
+  • Crée un premier champ mémoire global par défaut
+
+- Fonctions searchLocation() et afficherResultats()
+  • Gèrent l'autocomplétion pour les champs "lieu" en utilisant l’API Photon
+  • Affichent les suggestions de lieux dans une liste interactive
+  • Mémorisent les coordonnées (latitude et longitude) et affichent la confirmation à l'utilisateur
+  • Utilisent un système de "cache" pour éviter de refaire la même recherche
+
+Objectif global :
+→ Associer chaque zone ou lieu à un récit, une mémoire ou une expérience
+→ Aider l’utilisateur à localiser et enrichir ses contributions de manière précise et participative
+*/
+
+
+
   function updateMemoireSection() {
     const type = document.getElementById("type")?.value;
     const nom = document.getElementById("nom")?.value || "";
@@ -1159,7 +1293,7 @@
     const resultContainer = document.getElementById(resultContainerId);
 
     if (!resultContainer) {
-      console.error(`❌ Impossible de trouver #${resultContainerId}`);
+      console.error(`Impossible de trouver #${resultContainerId}`);
       return;
     }
 
@@ -1243,7 +1377,7 @@
         });
       })
       .catch(error => {
-        console.error("💥 Erreur lors de l'appel à Photon :", error);
+        console.error("Erreur lors de l'appel à Photon :", error);
         resultContainer.innerHTML = "<div style='padding: 8px; color: red;'>Erreur de recherche</div>";
         resultContainer.style.display = "block";
       });
@@ -1299,6 +1433,42 @@
   }
 
 
+/*
+*********************************************************************
+Partie JavaScript — Gestion des collaborations dynamiques et envoi final
+*********************************************************************
+
+Contenu et rôle principal :
+
+- Fonction addCollab()
+  • Ajoute dynamiquement un bloc "collaboration" supplémentaire quand l'utilisateur clique sur ➕
+  • Chaque bloc a son propre select pour le type d'entité, son nom, ses infos détaillées et un champ anecdote
+  • Génère des IDs uniques pour chaque bloc
+
+- Fonction updateDynamicCollabFields()
+  • Met à jour dynamiquement les champs supplémentaires selon le type d'entité sélectionné (famille, association, commune, etc.)
+  • Change le label et le placeholder du champ "nom"
+  • Ajoute des sous-options (boutons radios) pour les cas particuliers (famille/groupe, commune/institution)
+  • Gère les champs complémentaires (âge, activité, nombre de membres, etc.)
+  • Active l’autocomplétion pour les lieux
+
+- Fonction updateKnowledgeLabel()
+  • Met à jour le texte du label au-dessus du menu déroulant "lien avec le savoir-faire" selon le type choisi
+
+- Fonction updateTransmissionQuestion()
+  • Affiche ou cache la question sur l'intention de transmettre le savoir-faire selon le rôle choisi
+  • Modifie le texte pour qu'il corresponde au contexte
+
+- Soumission du formulaire
+  • Sérialise toutes les informations en un objet data
+  • Traite les champs classiques, les zones GeoJSON, et les collaborations ajoutées dynamiquement
+  • Prépare tout pour un envoi (par exemple à une API ou une base type Baserow)
+
+Objectif global :
+→ Permettre à l’utilisateur d’ajouter plusieurs collaborations de manière flexible et détaillée
+→ Adapter dynamiquement les champs aux différents types d’entités
+→ Construire un objet final prêt pour sauvegarde ou transmission
+*/
 
 
   let collabCount = 0;
@@ -1616,6 +1786,49 @@
     data.collaborations_dynamiques = JSON.stringify(collaborations);
 
 
+/*
+*******************************************************************************
+Partie finale du script JavaScript — Gestion des mémoires, upload, et finalisation
+*******************************************************************************
+
+Contenu et rôle principal :
+
+- Récupération des mémoires (zones et points)
+  • Boucle sur tous les textareas "memoire_*"
+  • Regroupe en deux tableaux : memoires_zones et memoires_points
+  • Lie chaque mémoire à son id_meta (zone ou point)
+
+- Upload du fichier média
+  • Vérifie si un fichier a été sélectionné
+  • Upload vers Baserow via leur API
+  • Ajoute l’ID du fichier dans l’objet data
+
+- Envoi final des données
+  • Serialize tout (infos, zones dessinées, collaborations dynamiques, mémoires)
+  • Envoi à Baserow via API en POST
+  • Affiche message de succès ou d’erreur
+  • Réinitialise toutes les données et le formulaire
+
+- Gestion du fichier média côté front
+  • Prévisualisation du fichier sélectionné
+  • Bouton pour supprimer le fichier avant envoi
+
+- Fonctions cartes additionnelles
+  • loadLavauxPolygon() : charge des polygones prédéfinis (zone centrale, tampon)
+  • enableCustomDrawing() : active le dessin libre d’une zone
+  • enableMapClick() : permet de cliquer pour ajouter un point
+  • resetMapInteractions() : nettoie les interactions et réinitialise l’état
+
+- Fonctions d’adaptation des champs dynamiques
+  • updateFamilleGroupeFields() et updateCommuneFields() : adaptent les labels/placeholder selon les radios
+  • updateCollabFamilleFields() et updateCollabCommuneFields() : idem pour les collaborations
+  • updateDynamicFamilleFields() et updateDynamicCommuneFields() : idem mais pour les collaborations dynamiques
+
+Objectif global :
+→ Réunir, enrichir et envoyer toutes les données de manière complète et cohérente
+→ Offrir une UX fluide (upload, zones, points, souvenirs, collaborations)
+→ Finaliser la logique du formulaire participatif
+*/
 
 
 

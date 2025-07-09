@@ -10,6 +10,18 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
+      /* 
+    -------------------------------
+    SECTION STYLES (CSS)
+    -------------------------------
+    Cette section définit les styles visuels principaux :
+    - Mise en forme globale du corps de page et des conteneurs
+    - Styles du panneau d'information latéral
+    - Apparence des boutons et de la liste des acteurs
+    - Style des métadonnées et détails affichés
+    - Style du conteneur de légende
+    - Adaptations responsives pour petits écrans
+    */
     body {
       font-family: sans-serif;
       padding: 20px;
@@ -163,7 +175,17 @@
   </style>
 </head>
 <body>
-
+  <!-- 
+    ----------------------------------------------------------
+    SECTION STRUCTURE PRINCIPALE DE LA PAGE (HTML)
+    ----------------------------------------------------------
+    Cette section définit toute la structure visible :
+    - En-tête général avec titre, boutons d'interaction (réinitialiser, basculer carte, etc.) et légende des types de nœuds/liens.
+    - Paragraphe explicatif sur l'origine des données et comment interagir.
+    - Conteneur du répertoire des acteurs (dépliable) pour accéder directement à un acteur.
+    - Zone principale (#main-container) qui accueille le réseau (vis.js), la carte (Leaflet) et le panneau d'information détaillé.
+    Chaque élément est prêt à être contrôlé dynamiquement via les scripts (affichage, masquage, centrage, etc.).
+  -->
   
 <header style="text-align: center; margin-bottom: 50px;">
   <h1 style="font-size: 2.4em; color: #2c3e50; margin-bottom: 10px;">
@@ -272,8 +294,24 @@
 
   <script>
 
+        /*
+    ----------------------------------------------------------
+    SECTION INITIALISATION DES VARIABLES GLOBALES ET OUTILS DE MAPPAGE
+    ----------------------------------------------------------
+    Ici, on déclare les variables principales utilisées dans tout le script :
+    - nodesMap : dictionnaire principal contenant tous les nœuds du réseau (clé = ID, valeur = objet nœud enrichi).
+    - data : objet regroupant les ensembles vis.js (nodes et edges), mis à jour dynamiquement.
+    - edges : tableau qui va stocker toutes les arêtes du réseau avant initialisation vis.js.
+    - options : options de configuration du réseau (styles, physics, etc.).
+    - leafletZones : dictionnaire pour gérer les zones géographiques associées aux nœuds sur la carte Leaflet.
+    
+    On y trouve aussi la fonction findSimilarNode(), qui sert à identifier un nœud existant (basé sur le nom et l'âge)
+    afin d'éviter de créer des doublons lorsqu'on fusionne ou charge des données collaboratives.
+    ----------------------------------------------------------
+    */
+
     let nodesMap = new Map(); 
-    let data; // ← rendre global
+    let data; 
 
 
     function findSimilarNode(nom, age, nodesMap) {
@@ -298,6 +336,39 @@
     let options; 
     let leafletZones = new Map();
 
+    /*
+    ---------------------------------------------------------------------------
+    SECTION CONSTRUCTION DU RÉSEAU PRINCIPAL (buildNetwork)
+    ---------------------------------------------------------------------------
+    Cette fonction asynchrone est le cœur du script. Elle effectue les étapes suivantes :
+
+    1️ Récupération des données :
+    - Appelle l'API Baserow pour obtenir la liste des réponses des participants et leurs collaborations.
+
+    2️ Traitement des nœuds (acteurs et lieux) :
+    - Crée ou fusionne les nœuds (acteurs principaux et collaborateurs).
+    - Associe les métadonnées détaillées (âge, métier, lieu, médias, anecdotes...).
+    - Gère les collaborations dynamiques et les zones géographiques (lieux ou zones d'étude).
+
+    3️ Création des arêtes :
+    - Génère les liens "collabore avec" entre les acteurs.
+    - Génère les liens "lié à cette zone" pour les relations au territoire (zones ou lieux).
+
+    4️ Génération des métadonnées détaillées :
+    - Prépare les informations enrichies (textes, médias, anecdotes) qui seront affichées dans le panneau d'infos.
+
+    5️ Affichage du réseau (vis.js) :
+    - Construit et affiche le graphe avec vis.js (nœuds, arêtes, styles, groupes).
+    - Crée la liste latérale d'acteurs avec boutons pour les localiser.
+
+    6️ Ajout des interactions utilisateur :
+    - Gestion des clics sur les nœuds et arêtes (affichage d'infos détaillées et zoom).
+    - Gestion des boutons (réinitialiser la vue, afficher carte/réseau).
+    - Clignotements synchronisés entre carte Leaflet et réseau vis.js.
+
+    Cette fonction pose donc les fondations du réseau interactif, relie toutes les données entre elles et prépare les interfaces.
+    ---------------------------------------------------------------------------
+    */
 
 
     async function buildNetwork() {
@@ -949,6 +1020,7 @@
 
           } else if (params.edges.length > 0) {
             const edgeId = params.edges[0];
+            
 
             if (lockedEdges.has(edgeId)) {
               console.log("Arête verrouillée pendant clignotement : AFFICHAGE quand même autorisé", edgeId);
@@ -1316,6 +1388,46 @@
 
     }
 
+        /*
+    ---------------------------------------------------------------------------
+    SECTION INTERACTIONS AVEC LA CARTE (Leaflet)
+    ---------------------------------------------------------------------------
+    Cette section complète la visualisation du réseau en ajoutant une représentation
+    cartographique interactive via Leaflet. Elle comprend plusieurs fonctions clés :
+
+    1️ buildNetwork(); — Appel initial pour construire le graphe réseau.
+
+    2️ getNodeCoords() :
+       - Extrait les coordonnées (lat, lon) des métadonnées d'un nœud.
+       - Utilisé pour positionner les marqueurs sur la carte.
+
+    3️ Variables globales Leaflet :
+       - leafletMap, markersLayer, leafletMarkers : gestion de la carte et des marqueurs.
+       - leafletLines, leafletZones : gestion des lignes et zones géographiques.
+       - ignoreNetworkBlink, blinkingEdges... : états liés aux animations synchronisées
+         entre le réseau et la carte.
+
+    4️ initLeafletMap() :
+       - Initialise la carte Leaflet.
+       - Ajoute un fond (tiles) et un layer vide pour y mettre marqueurs et zones.
+
+    5️ populateLeafletMap() :
+       - Parcourt tous les nœuds pour créer des marqueurs (cercles pour acteurs, zones, etc.).
+       - Ajoute des événements sur chaque marqueur (affichage d'infos détaillées, zoom).
+       - Gère aussi l’affichage des zones géographiques (polygones ou points).
+       - Crée les lignes reliant les nœuds, synchronisées avec le réseau vis.js.
+       - Gère les clics sur les lignes (affichage d’infos, zoom, clignotement côté réseau).
+       - Ajuste les styles et synchronise les interactions carte ↔ réseau.
+
+    6️ Centrage automatique :
+       - Après avoir ajouté tous les éléments, ajuste la vue pour englober
+         tous les marqueurs et zones affichés.
+
+    Cette section permet donc d’explorer le réseau sous un angle géographique,
+    en synchronisation dynamique avec la vue réseau (vis.js).
+    ---------------------------------------------------------------------------
+    */
+
 
     buildNetwork();
     function getNodeCoords(meta) {
@@ -1336,7 +1448,7 @@
     let ignoreNetworkBlink = false;
     let blinkingEdges = new Set();
     let blinkingLeafletLines = new Set();
-    let lockedEdges = new Set();  // ← Arêtes temporairement "verrouillées"
+    let lockedEdges = new Set();  
 
 
 
@@ -1559,7 +1671,26 @@
           }
 
           ignoreNetworkBlink = true;
-          blinkOnlyNetworkEdge(matchingEdgeId);
+
+        
+          lockedEdges.delete(matchingEdgeId);
+
+      
+          const originalStyle = { ...line.options };
+          line.setStyle({
+            color: "#8B0000" 
+          });
+
+          // Après 5 sec, on remet la couleur originale
+          setTimeout(() => {
+            line.setStyle(originalStyle);
+          }, 5000);
+
+
+      
+          blinkNetworkEdgeOnly(matchingEdgeId);
+
+
 
           const edgeData = data.edges.get(matchingEdgeId);
           const fromNode = nodesMap.get(edgeData.from);
@@ -1677,6 +1808,44 @@
       adjustLeafletElementsSize();
     }
     
+
+        /*
+    ---------------------------------------------------------------------------
+    SECTION FINALE — GESTION DES BOUTONS D'AFFICHAGE, CLIGNOTEMENTS & ZOOM
+    ---------------------------------------------------------------------------
+    Cette section gère les interactions de l’utilisateur avec les boutons
+    pour basculer entre la carte et le réseau, afficher les deux, ou afficher
+    le répertoire des acteurs. Elle contient aussi toutes les fonctions
+    liées aux effets de clignotement et au zoom.
+
+    1 Boutons d’affichage :
+      - toggle-map : affiche soit la carte seule, soit le réseau seul.
+      - toggle-actor-list : ouvre ou ferme le répertoire des acteurs.
+      - toggle-network-map : affiche la carte et le réseau en même temps.
+
+    2 Fonctions d'animation :
+      - blinkLeafletLayer() : clignoter un marqueur ou une zone sur la carte.
+      - blinkLeafletLine(), blinkOnlyLeafletLine(), blinkLeafletLineOnly() :
+        clignotements des lignes (liens) côté Leaflet.
+      - blinkNetworkNode() : clignoter un nœud dans le réseau vis.js.
+      - blinkOnlyNetworkEdge(), blinkNetworkEdgeOnly() :
+        clignotements des arêtes (liens) côté réseau.
+
+    3 Synchronisation :
+      - Lors d’un clic sur une ligne ou un nœud, l’effet de clignotement
+        est lancé à la fois sur la carte et le réseau si nécessaire.
+
+    4 Zoom & ajustements :
+      - adjustLeafletElementsSize() : ajuste la taille des marqueurs et lignes
+        en fonction du niveau de zoom Leaflet.
+      - zoomNetwork() : permet d’agrandir ou de réduire le réseau vis.js
+        de façon progressive.
+
+    L’objectif est de renforcer la lisibilité et l'interactivité de la
+    visualisation en mettant en valeur certains éléments à la demande,
+    tout en gardant une synchronisation entre la vue réseau et la vue carte.
+    ---------------------------------------------------------------------------
+    */
 
 
     document.getElementById("toggle-map").addEventListener("click", () => {
@@ -2109,6 +2278,63 @@
       const line = leafletLines.get(lineKey) || leafletLines.get(`zone-${from}-${to}`);
       if (line) blinkLeafletLineOnly(lineKey, line);
     }
+
+
+    function blinkNetworkEdgeOnly(edgeId, duration = 4000, interval = 400) {
+      const edge = data.edges.get(edgeId);
+      if (!edge) {
+        console.warn("Arête non trouvée :", edgeId);
+        return;
+      }
+
+      // Lock
+      lockedEdges.add(edgeId);
+      blinkingEdges.add(edgeId);
+      console.log("Edge locked uniquement réseau:", edgeId);
+
+      const originalEdge = { ...edge };
+      let visible = true;
+      let elapsed = 0;
+
+      const blinkInterval = setInterval(() => {
+        visible = !visible;
+        elapsed += interval;
+
+        data.edges.update({
+          id: edgeId,
+          color: {
+            color: originalEdge.color?.color || "#999",
+            opacity: visible ? 1 : 0
+          },
+          font: {
+            color: visible ? "#000" : "rgba(0,0,0,0)"
+          }
+        });
+
+        if (elapsed >= duration) {
+          clearInterval(blinkInterval);
+          blinkingEdges.delete(edgeId);
+          lockedEdges.delete(edgeId);
+          console.log("Edge unlocked (réseau uniquement):", edgeId);
+
+          // Remise état normal
+          const current = data.edges.get(edgeId);
+          if (current) {
+            data.edges.update({
+              id: edgeId,
+              color: {
+                color: originalEdge.color?.color || "#999",
+                opacity: (current.color?.opacity === 0 || current.color?.opacity === 0.05) ? current.color.opacity : 1
+              },
+              font: {
+                color: "#000"
+              }
+            });
+          }
+        }
+      }, interval);
+    }
+
 
 
     function zoomNetwork(factor) {
