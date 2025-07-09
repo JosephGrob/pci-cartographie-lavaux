@@ -34,7 +34,7 @@ Chaque étape est documentée et accessible individuellement à travers ce dép�
 
 ## Contenu du dépôt
 
-Le dossier contient les éléments suivants :
+Le dossier contient les éléments suivants:
 
 ### Interfaces HTML
 
